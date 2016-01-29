@@ -1,0 +1,12 @@
+for 1/28: 
+Matsuda et al. 2011 (The Subaru Lya blob survey: a sample of 100-kpc Lya blobs at z=3): 
+The authors took images with the Subaru Suprime-Cam of 12 fields in the sky looking for Lya blobs (LABs) at z~3. 
+They found 14 giant (100-200 kpc) LABs in these images, which almost tripled the number of giant LABs known. 
+When looking for overdensities in the images, they found that blobs that are more elongated and filament-shaped 
+tended to be located in average-density environment, while rounder, more spherical blobs are found in both average 
+and overdense environments. This suggests that blobs may follow a morphology-density relation. 
+ 
+ 
+for 2/04: 
+Brodwin et al. 2015 (2016?) (IDCS J1426.5+3508: The most massive galaxy cluster at z > 1.5): 
+(blurb) 
