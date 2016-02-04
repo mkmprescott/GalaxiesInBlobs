@@ -9,4 +9,75 @@ and overdense environments. This suggests that blobs may follow a morphology-den
  
 for 2/04: 
 Brodwin et al. 2015 (2016?) (IDCS J1426.5+3508: The most massive galaxy cluster at z > 1.5): 
+The authors obtained Chandra x-ray data for the massive galaxy cluster IDCS J1426.5+3508 (which I'll call 
+"this cluster" hereafter) as followup to previous studies that used IR and mm data. The authors then 
+used four different scaling relations to estimate the cluster mass: x-ray luminosity, temperature, gas mass, 
+and Yx (the product of the core temperature and the gas mass). They found that the mass estimates from all 
+four of these relations were in excellent agreement, and also agreed with two previous estimates obtained  
+using the Sunyaev-Zeldovich effect and strong gravitational lensing (M500 ~ 2.6x10^14 Msun). This 
+consistency indicates that the cluster is relaxed, despite being at high redshift. The authors also 
+discovered that the core of the cluster is offset from the x-ray centroid by about 30 kpc, which they 
+attribute to the core "sloshing" around since the cluster grew so quickly. The state of the intracluster 
+medium (ICM) suggests that this cluster interacted with another massive structure within the last 500 Myr, 
+but that its cooling time was only 160 Myr. This means that this cluster probably formed very early and 
+grew very rapidly to its current large size. 
+
+
+for 2/11: 
+(paper)
+(blurb) 
+
+
+for 2/18: 
+(paper)
+(blurb) 
+
+
+for 2/25: 
+(paper)
+(blurb)
+
+
+for 3/03: 
+(paper)
+(blurb) 
+
+
+for 3/10: 
+(paper) 
+(blurb) 
+
+
+for 3/17: 
+(paper)
+(blurb) 
+
+
+for 3/24: 
+(paper)
+(blurb) 
+
+
+for 3/31:
+(paper)
+(blurb) 
+
+
+for 4/07:
+(paper)
+(blurb) 
+
+
+for 4/14:
+(paper)
+(blurb) 
+
+
+for 4/21: 
+(paper)
+(blurb)
+
+
+for 4/28: 
+(paper)
 (blurb) 
