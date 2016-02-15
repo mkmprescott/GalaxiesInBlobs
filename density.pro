@@ -78,7 +78,7 @@ END
 
 
 FUNCTION get_galaxies, ra, dec, radius, data
-  distance = sqrt(  ( (ra - data.FIELD15) * cos(dec) )^2. + (dec - data.FIELD16)^2. )
+  distance = sqrt(  ( (ra - data.FIELD15) * cos(dec*!PI/180.) )^2. + (dec - data.FIELD16)^2. )
   galaxies_in_aperture = WHERE ((distance LT radius), n_galaxies)
   RETURN, galaxies_in_aperture
 END
