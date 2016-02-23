@@ -3,9 +3,11 @@ PRO density   ;, seed, nApertures
 FORWARD_FUNCTION get_galaxies
 FORWARD_FUNCTION rsex
 
-;data = rsex("prg1_radectest.cat")     ; this is reading everything in as one giant field...
+; f140w
 
-data = read_csv("prg1_rdtest.cat", n_table_header=16)
+data = rsex("prg1_radectest.cat")     ; this is reading everything in as one giant field...
+
+;data = read_csv("prg1_rdtest.cat", n_table_header=16)
 ; will later modify this to be more automated
 
 ; to make mag bins: make "new" catalogs! 
