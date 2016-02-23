@@ -35,9 +35,10 @@ print, blob_ngal, " galaxies in the blob region"
 ;  66 galaxies in the blob region 
 
 ; mag binning test: 
+binsize=5.
 galaxy_maglist = list()
-FOR mag=15., 30., 5. DO BEGIN
-  blob_galaxies_binned=get_galaxies_binned(blobra, blobdec, aperture_radius_blob, data, mag, mag+5.)
+FOR mag=15., 30., binsize DO BEGIN
+  blob_galaxies_binned=get_galaxies_binned(blobra, blobdec, aperture_radius_blob, data, mag, mag+binsize)
   galaxy_maglist.Add, blob_galaxies_binned
 ENDFOR 
 
