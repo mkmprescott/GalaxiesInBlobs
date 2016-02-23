@@ -2,12 +2,9 @@ PRO density   ;, seed, nApertures
 
 FORWARD_FUNCTION get_galaxies
 FORWARD_FUNCTION rsex
+FORWARD_FUNCTION get_galaxies_binned
 
-; f140w
-
-data = rsex("prg1_radectest.cat")     ; this is reading everything in as one giant field...
-
-;data = read_csv("prg1_rdtest.cat", n_table_header=16)
+data = rsex("setestF140W.cat")     
 ; will later modify this to be more automated
 
 ; to make mag bins: make "new" catalogs! 
@@ -33,13 +30,23 @@ blobdensity = float(blob_ngal) / (!dPI*(10./3600.)^2.)   ; the denominator is th
 print, blobdensity, " galaxies per square degree in blob region"  
 print, blob_ngal, " galaxies in the blob region"
 
-; !!!!!!! CODE PRINTS:     0.0159155 galaxies per square arcsecond in blob region
-;  that seems low...
-;  REVISED: code prints
-;       206264.81 galaxies per square degree in blob region
-;       5 galaxies in the blob region
+; !!!!!!! CODE PRINTS:   
+;  2722695.4 galaxies per square degree in blob region
+;  66 galaxies in the blob region 
 
+; mag binning test: 
+galaxy_maglist = list()
+FOR mag=15., 30., 5. DO BEGIN
+  blob_galaxies_binned=get_galaxies_binned(blobra, blobdec, aperture_radius_blob, data, mag, mag+5.)
+  galaxy_maglist.Add, blob_galaxies_binned
+ENDFOR 
 
+help, galaxy_maglist
+help, galaxy_maglist[0]
+help, galaxy_maglist[1]
+help, galaxy_maglist[2]
+help, galaxy_maglist[3]
+; In the end, the galaxies in all the bins add up to 66, as they should. Success!
 
 
 
@@ -91,10 +98,42 @@ END
 
 
 FUNCTION get_galaxies, ra, dec, radius, data
-  distance = sqrt(  ( (ra - data.FIELD15) * cos(dec*!dPI/180.) )^2. + (dec - data.FIELD16)^2. )
-  galaxies_in_aperture = WHERE ((distance LT radius), n_galaxies)
+  distance = sqrt(  ( (ra - data.ALPHA_J2000) * cos(dec*!dPI/180.) )^2. + (dec - data.DELTA_J2000)^2. )
+  galaxies_in_aperture = WHERE (((distance LT radius) AND (data.CLASS_STAR LT 0.8) AND (data.IMAFLAGS_ISO EQ 0.)), n_galaxies)
   RETURN, galaxies_in_aperture
 END
+
+
+
+FUNCTION get_galaxies_binned, ra, dec, radius, data, minmag, maxmag
+  distance = sqrt(  ( (ra - data.ALPHA_J2000) * cos(dec*!dPI/180.) )^2. + (dec - data.DELTA_J2000)^2. )
+  galaxies_in_aperture = WHERE (((distance LT radius) AND (data.CLASS_STAR LT 0.8) AND (data.IMAFLAGS_ISO EQ 0.) AND (data.MAG_ISO GE minmag) AND (data.MAG_ISO LT maxmag)), n_galaxies)
+  RETURN, galaxies_in_aperture
+END
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
