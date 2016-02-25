@@ -3,6 +3,7 @@ PRO density   ;, seed, nApertures
 FORWARD_FUNCTION get_galaxies
 FORWARD_FUNCTION rsex
 FORWARD_FUNCTION get_galaxies_binned
+FORWARD_FUNCTION Poisson_error
 
 data = rsex("setestF140W.cat")     
 ; will later modify this to be more automated
@@ -34,24 +35,38 @@ print, blob_ngal, " galaxies in the blob region"
 ;  2722695.4 galaxies per square degree in blob region
 ;  66 galaxies in the blob region 
 
-; mag binning test: 
-binsize=5.
+; mag binning: 
+binsize=0.5
+brightestmag = 15.
+dimmestmag = 35.
+
+maglist = list()
 galaxy_maglist = list()
-FOR mag=15., 30., binsize DO BEGIN
+FOR mag=brightestmag, dimmestmag, binsize DO BEGIN
   blob_galaxies_binned=get_galaxies_binned(blobra, blobdec, aperture_radius_blob, data, mag, mag+binsize)
   galaxy_maglist.Add, blob_galaxies_binned
+  maglist.Add, mag 
+ENDFOR 
+ 
+mags = maglist.ToArray(Type=4)
+nbins = n_elements(galaxy_maglist)
+ngals_in_bins = dblarr(nbins)
+ngal_errors = dblarr(nbins) 
+
+FOR i=0, nbins-1. DO BEGIN
+  bin = galaxy_maglist[i]
+  IF (bin[0] EQ -1) THEN ngal = 0. ELSE ngal = n_elements(bin) 
+  ngals_in_bins[i] = ngal 
+  ngal_errors[i] = Poisson_error(ngal) 
+  print, ngals_in_bins[i], " +- ", ngal_errors[i], " galaxies in bin", i+1
 ENDFOR 
 
-help, galaxy_maglist
-help, galaxy_maglist[0]
-help, galaxy_maglist[1]
-help, galaxy_maglist[2]
-help, galaxy_maglist[3]
-; In the end, the galaxies in all the bins add up to 66, as they should. Success!
-
-
-
-
+;print, ngals_in_bins 
+;print, ngal_errors 
+print, total(ngals_in_bins), " total galaxies" 
+plot, mags, ngals_in_bins, title="Galaxies in Blob Region", xtitle="magnitude (F140W)", ytitle="number of galaxies", background=255, color=0, charsize=1.5, psym=10, yrange=[0,15], /ystyle 
+errplot, mags, ngals_in_bins-ngal_errors, ngals_in_bins+ngal_errors, color=0
+write_png, "blobdensity.png", tvrd(/true)
 
 
 ; later stuff:
@@ -106,15 +121,18 @@ END
 
 
 
-FUNCTION get_galaxies_binned, ra, dec, radius, data, minmag, maxmag
+FUNCTION get_galaxies_binned, ra, dec, radius, data, brightmag, dimmag
   distance = sqrt(  ( (ra - data.ALPHA_J2000) * cos(dec*!dPI/180.) )^2. + (dec - data.DELTA_J2000)^2. )
-  galaxies_in_aperture = WHERE (((distance LT radius) AND (data.CLASS_STAR LT 0.8) AND (data.IMAFLAGS_ISO EQ 0.) AND (data.MAG_ISO GE minmag) AND (data.MAG_ISO LT maxmag)), n_galaxies)
+  galaxies_in_aperture = WHERE (((distance LT radius) AND (data.CLASS_STAR LT 0.8) AND (data.IMAFLAGS_ISO EQ 0.) AND (data.MAG_ISO GE brightmag) AND (data.MAG_ISO LT dimmag)), n_galaxies)
   RETURN, galaxies_in_aperture
 END
 
 
 
-
+FUNCTION Poisson_error, ngal 
+  error = sqrt(double(ngal))
+  RETURN, error
+END 
 
 
 
