@@ -37,7 +37,7 @@ print, blob_ngal, " galaxies in the blob region"
 
 ; mag binning: 
 binsize=0.5
-brightestmag = 15.
+brightestmag = 20.
 dimmestmag = 35.
 
 maglist = list()
@@ -64,8 +64,16 @@ ENDFOR
 ;print, ngals_in_bins 
 ;print, ngal_errors 
 print, total(ngals_in_bins), " total galaxies" 
+window, 0, retain=2, xsize=1200, ysize=1000
 plot, mags, ngals_in_bins, title="Galaxies in Blob Region", xtitle="magnitude (F140W)", ytitle="number of galaxies", background=255, color=0, charsize=1.5, psym=10, yrange=[0,15], /ystyle 
 errplot, mags, ngals_in_bins-ngal_errors, ngals_in_bins+ngal_errors, color=0
+write_png, "blobngal.png", tvrd(/true)
+
+densities = double(ngals_in_bins)/(!dPI*(10./3600.)^2.) 
+density_errors = double(ngal_errors)/(!dPI*(10./3600.)^2.)
+window, 1, retain=2, xsize=1200, ysize=1000
+plot, mags, densities, title="Galaxies in Blob Region", xtitle="magnitude (F140W)", ytitle="N!Igal!N per deg!E2!N per 0.5 mag", background=255, color=0, charsize=1.5, psym=-2, /ylog, yrange=[1d4,1d6], /ystyle 
+errplot, mags, densities-density_errors, densities+density_errors, color=0
 write_png, "blobdensity.png", tvrd(/true)
 
 
