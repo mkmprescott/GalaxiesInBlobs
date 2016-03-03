@@ -2,10 +2,10 @@ PRO density   ;, seed, nApertures
 
 FORWARD_FUNCTION get_galaxies
 FORWARD_FUNCTION rsex
+FORWARD_FUNCTION get_galaxies_binned
+FORWARD_FUNCTION Poisson_error
 
-;data = rsex("prg1_radectest.cat")     ; this is reading everything in as one giant field...
-
-data = read_csv("prg1_rdtest.cat", n_table_header=16)
+data = rsex("setestF140W.cat")     
 ; will later modify this to be more automated
 
 ; to make mag bins: make "new" catalogs! 
@@ -31,17 +31,50 @@ blobdensity = float(blob_ngal) / (!dPI*(10./3600.)^2.)   ; the denominator is th
 print, blobdensity, " galaxies per square degree in blob region"  
 print, blob_ngal, " galaxies in the blob region"
 
-; !!!!!!! CODE PRINTS:     0.0159155 galaxies per square arcsecond in blob region
-;  that seems low...
-;  REVISED: code prints
-;       206264.81 galaxies per square degree in blob region
-;       5 galaxies in the blob region
+; !!!!!!! CODE PRINTS:   
+;  2722695.4 galaxies per square degree in blob region
+;  66 galaxies in the blob region 
 
+; mag binning: 
+binsize=0.5
+brightestmag = 20.
+dimmestmag = 35.
 
+maglist = list()
+galaxy_maglist = list()
+FOR mag=brightestmag, dimmestmag, binsize DO BEGIN
+  blob_galaxies_binned=get_galaxies_binned(blobra, blobdec, aperture_radius_blob, data, mag, mag+binsize)
+  galaxy_maglist.Add, blob_galaxies_binned
+  maglist.Add, mag 
+ENDFOR 
+ 
+mags = maglist.ToArray(Type=4)
+nbins = n_elements(galaxy_maglist)
+ngals_in_bins = dblarr(nbins)
+ngal_errors = dblarr(nbins) 
 
+FOR i=0, nbins-1. DO BEGIN
+  bin = galaxy_maglist[i]
+  IF (bin[0] EQ -1) THEN ngal = 0. ELSE ngal = n_elements(bin) 
+  ngals_in_bins[i] = ngal 
+  ngal_errors[i] = Poisson_error(ngal) 
+  print, ngals_in_bins[i], " +- ", ngal_errors[i], " galaxies in bin", i+1
+ENDFOR 
 
+;print, ngals_in_bins 
+;print, ngal_errors 
+print, total(ngals_in_bins), " total galaxies" 
+window, 0, retain=2, xsize=1200, ysize=1000
+plot, mags, ngals_in_bins, title="Galaxies in Blob Region", xtitle="magnitude (F140W)", ytitle="number of galaxies", background=255, color=0, charsize=1.5, psym=10, yrange=[0,15], /ystyle 
+errplot, mags, ngals_in_bins-ngal_errors, ngals_in_bins+ngal_errors, color=0
+write_png, "blobngal.png", tvrd(/true)
 
-
+densities = double(ngals_in_bins)/(!dPI*(10./3600.)^2.) 
+density_errors = double(ngal_errors)/(!dPI*(10./3600.)^2.)
+window, 1, retain=2, xsize=1200, ysize=1000
+plot, mags, densities, title="Galaxies in Blob Region", xtitle="magnitude (F140W)", ytitle="N!Igal!N per deg!E2!N per 0.5 mag", background=255, color=0, charsize=1.5, psym=-2, /ylog, yrange=[1d4,1d6], /ystyle 
+errplot, mags, densities-density_errors, densities+density_errors, color=0
+write_png, "blobdensity.png", tvrd(/true)
 
 
 ; later stuff:
@@ -89,10 +122,45 @@ END
 
 
 FUNCTION get_galaxies, ra, dec, radius, data
-  distance = sqrt(  ( (ra - data.FIELD15) * cos(dec*!dPI/180.) )^2. + (dec - data.FIELD16)^2. )
-  galaxies_in_aperture = WHERE ((distance LT radius), n_galaxies)
+  distance = sqrt(  ( (ra - data.ALPHA_J2000) * cos(dec*!dPI/180.) )^2. + (dec - data.DELTA_J2000)^2. )
+  galaxies_in_aperture = WHERE (((distance LT radius) AND (data.CLASS_STAR LT 0.8) AND (data.IMAFLAGS_ISO EQ 0.)), n_galaxies)
   RETURN, galaxies_in_aperture
 END
+
+
+
+FUNCTION get_galaxies_binned, ra, dec, radius, data, brightmag, dimmag
+  distance = sqrt(  ( (ra - data.ALPHA_J2000) * cos(dec*!dPI/180.) )^2. + (dec - data.DELTA_J2000)^2. )
+  galaxies_in_aperture = WHERE (((distance LT radius) AND (data.CLASS_STAR LT 0.8) AND (data.IMAFLAGS_ISO EQ 0.) AND (data.MAG_ISO GE brightmag) AND (data.MAG_ISO LT dimmag)), n_galaxies)
+  RETURN, galaxies_in_aperture
+END
+
+
+
+FUNCTION Poisson_error, ngal 
+  error = sqrt(double(ngal))
+  RETURN, error
+END 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
