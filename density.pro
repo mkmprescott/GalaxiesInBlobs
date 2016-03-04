@@ -1,121 +1,170 @@
-PRO density   ;, seed, nApertures
-
+PRO density
+;--------------------------------------------------------------------------------------------------
+;  some day this will include a nice thorough header and description... but not today
+;--------------------------------------------------------------------------------------------------
 FORWARD_FUNCTION get_galaxies
 FORWARD_FUNCTION rsex
 FORWARD_FUNCTION get_galaxies_binned
 FORWARD_FUNCTION Poisson_error
 
+
 data = rsex("setestF140W.cat")     
 ; will later modify this to be more automated
 
-; to make mag bins: make "new" catalogs! 
-;  make a for loop with i=minimum mag, maximum mag, binsize
-;   make a list or file or something for galaxies in this binsize
-;   run through original catalog and find galaxies with i <= mag <= i+binsize
-;   add those galaxies to the list or file or whatever
-;  now you have a number of mini catalogs for mags
-;  then you can do the following for each mag catalog
-
+; HARD-CODED PARAMETERS: 
 blobra = 218.8020833   ; right ascension of blob PRG1 in decimal degrees
 blobdec = 35.18558333  ; declination of blob PRG1 in decimal degrees
-; I think I'm going to make a data file that contains the RA and dec of all our blobs 
-;   and use that for this part - later
-
-; get blob density: number of galaxies inside aperture centered on blob (radius of say, 10 arcsec or so)
-aperture_radius_blob = 10./3600.   ; aperture with radius of 10 arcsec in decimal degrees
-blob_galaxies=get_galaxies(blobra, blobdec, aperture_radius_blob, data)
-blob_ngal = n_elements(blob_galaxies)
-; now get density in number of galaxies per square arcsecond 
-blobdensity = float(blob_ngal) / (!dPI*(10./3600.)^2.)   ; the denominator is the area of the aperture around the blob, which has 10" radius  
-
-print, blobdensity, " galaxies per square degree in blob region"  
-print, blob_ngal, " galaxies in the blob region"
-
-; !!!!!!! CODE PRINTS:   
-;  2722695.4 galaxies per square degree in blob region
-;  66 galaxies in the blob region 
-
-; mag binning: 
+; I'm going to make a data file that contains the RA and dec of all blobs and use that for this part later on
+ap_radius = 10./3600.   ; aperture with radius of 10 arcsec in decimal degrees
+; mag binning stuff:
 binsize=0.5
 brightestmag = 20.
 dimmestmag = 35.
+nbins = (dimmestmag - brightestmag + binsize)/binsize
+mags = brightestmag + binsize*findgen(nbins)
+; random aperture stuff:
+nApertures = 1000.
+image = mrdfits('/boomerang-data/alhall/LABoverdensity/GalaxiesInBlobs/Images/stackedVJH.fits', 0, hdr)
+bpm = mrdfits('/boomerang-data/alhall/LABoverdensity/GalaxiesInBlobs/Images/stackedVJH_bpm.fits')
+sizeinfo = size(image)
+npix_x = sizeinfo[1]
+npix_y = sizeinfo[2]
 
-maglist = list()
+
+
+
+; First, a test: get raw blob density, ie, number of galaxies inside aperture centered on blob with radius specified above with no mag bins yet
+blob_galaxies_all=get_galaxies(blobra, blobdec, ap_radius, data)
+blob_ngalraw = n_elements(blob_galaxies_all)
+; now get density in number of galaxies per square arcsecond 
+blobdensityraw = float(blob_ngalraw) / (!dPI*ap_radius^2.)    
+print, blobdensityraw, " galaxies per square degree in blob region"  
+print, blob_ngalraw, " galaxies in the blob region"
+;  CODE PRINTS:   
+;  2722695.4 galaxies per square degree in blob region
+;  66 galaxies in the blob region 
+
+
+
+
+
+; mag binning: 
+
 galaxy_maglist = list()
 FOR mag=brightestmag, dimmestmag, binsize DO BEGIN
-  blob_galaxies_binned=get_galaxies_binned(blobra, blobdec, aperture_radius_blob, data, mag, mag+binsize)
+  blob_galaxies_binned=get_galaxies_binned(blobra, blobdec, ap_radius, data, mag, mag+binsize)
   galaxy_maglist.Add, blob_galaxies_binned
-  maglist.Add, mag 
-ENDFOR 
+ENDFOR      ; Now we have a list containing arrays of the IDs of every galaxy in each mag bin, one array per bin
  
-mags = maglist.ToArray(Type=4)
-nbins = n_elements(galaxy_maglist)
-ngals_in_bins = dblarr(nbins)
-ngal_errors = dblarr(nbins) 
+blob_ngal_binned = dblarr(nbins)
+blob_ngalerr_binned = dblarr(nbins) 
 
 FOR i=0, nbins-1. DO BEGIN
   bin = galaxy_maglist[i]
   IF (bin[0] EQ -1) THEN ngal = 0. ELSE ngal = n_elements(bin) 
-  ngals_in_bins[i] = ngal 
-  ngal_errors[i] = Poisson_error(ngal) 
-  print, ngals_in_bins[i], " +- ", ngal_errors[i], " galaxies in bin", i+1
+  blob_ngal_binned[i] = ngal 
+  blob_ngalerr_binned[i] = Poisson_error(ngal) 
+  print, blob_ngal_binned[i], " +- ", blob_ngalerr_binned[i], " galaxies in bin", i+1   ; just a test to make sure it's working
 ENDFOR 
+print, total(blob_ngal_binned), " total galaxies"   ; just a test to make sure it's working - this should match the previous no-bin number 
 
-;print, ngals_in_bins 
-;print, ngal_errors 
-print, total(ngals_in_bins), " total galaxies" 
+; Now, plot up number in each bin with errors:
 window, 0, retain=2, xsize=1200, ysize=1000
-plot, mags, ngals_in_bins, title="Galaxies in Blob Region", xtitle="magnitude (F140W)", ytitle="number of galaxies", background=255, color=0, charsize=1.5, psym=10, yrange=[0,15], /ystyle 
-errplot, mags, ngals_in_bins-ngal_errors, ngals_in_bins+ngal_errors, color=0
+plot, mags, blob_ngal_binned, title="Galaxies in Blob Region", xtitle="magnitude (F140W)", ytitle="number of galaxies", background=255, color=0, charsize=1.5, psym=10, yrange=[0,15], /ystyle 
+errplot, mags, blob_ngal_binned-blob_ngalerr_binned, blob_ngal_binned+blob_ngalerr_binned, color=0
 write_png, "blobngal.png", tvrd(/true)
 
-densities = double(ngals_in_bins)/(!dPI*(10./3600.)^2.) 
-density_errors = double(ngal_errors)/(!dPI*(10./3600.)^2.)
+; Finally, compute density and plot that with errors:
+densities = double(blob_ngal_binned)/(!dPI*ap_radius^2.) 
+density_errors = double(blob_ngalerr_binned)/(!dPI*ap_radius^2.)
 window, 1, retain=2, xsize=1200, ysize=1000
 plot, mags, densities, title="Galaxies in Blob Region", xtitle="magnitude (F140W)", ytitle="N!Igal!N per deg!E2!N per 0.5 mag", background=255, color=0, charsize=1.5, psym=-2, /ylog, yrange=[1d4,1d6], /ystyle 
 errplot, mags, densities-density_errors, densities+density_errors, color=0
 write_png, "blobdensity.png", tvrd(/true)
 
 
-; later stuff:
 
-;aperture_ra_list = list()     ; this will contain RAs of apertures
-;aperture_dec_list = list()    ; this will contain declinations of apertures
-;aperture_radius_list = list() ; this will contain aperture radii 
-;aperture_ngal_list = list()   ; this will contain # galaxies in each aperture
 
-;FOR i=0, nApertures DO BEGIN
-;;  place an aperture randomly and add its properties to the lists of aperture properties
-;  aperture_radius = 10.*randomu(seed)
-;  aperture_radius_list.Add, aperture_radius
-;  aperture_ra = (minimum ra of image) + (max ra - min ra)*randomu(seed)
-;  aperture_ra_list.Add, aperture_ra
-;  aperture_dec = (minimum dec of image) + (max dec - min dec)*randomu(seed)
-;  ; figure out the number of galaxies in the aperture 
-;  galaxies = get_galaxies(aperture_ra, aperture_dec, aperture_radius, data)
-;  ngal = n_elements(galaxies)
-;  ; NOTE: ALSO OUTPUT THE WHOLE LIST OF GALAXIES!!! FOR MAG STUFF TO BE ADDED SOON
-;  ; append # of galaxies in the aperture to list of those
-;  aperture_ngal_list.Add, ngal
-;ENDFOR
-;
-;; turn all the lists into arrays to work with them now that they're finished being constructed
-;aperture_ra_array = aperture_ra_list.ToArray(Type=5)
-;aperture_dec_array = aperture_dec_list.ToArray(Type=5)
-;aperture_radius_array = aperture_radius_list.ToArray(Type=5)
-;aperture_ngal_array = aperture_ngal_list.ToArray(Type=5)
-;
-;; compute density PER MAG BIN!! FIX THIS!!
-;densityarray = aperture_ngal_array / ( !PI*(aperture_radius_array)^2. )    ; array of the densities in each aperture
-;field_density = total(densityarray) / double(n_elements(densityarray))     ; this is the field density for the whole image
+
+; SAMPLING THE FIELD
+
+ap_ras = dblarr(nApertures)     ; this will contain RAs of all apertures
+ap_decs = dblarr(nApertures)    ; this will contain declinations of all apertures
+ap_ngal_binned = dblarr(nbins,nApertures)   ; this will contain # galaxies in each aperture in each mag bin
+ap_ngalerr_binned = dblarr(nbins,nApertures)   ; same as above but errors on # rather than just #
+;ap_galaxy_list = list()     ; this will contain the IDs of all galaxies in each aperture 
+;pixscale = 0.06   ; arcseconds per pixel
+;apradiuspix = 10./pixscale   ; 10 arcsecond aperture
+megalist = list()   ; list of lists, each corresponding to one aperture, containing the ID #s of all the galaxies in each mag bin 
+
+
+FOR ap=0, nApertures-1 DO BEGIN
+  ; place an aperture randomly and add its properties to the lists of aperture properties
+  ; aperture_radius = 10.*randomu(seed)
+  ; aperture_radius_list.Add, aperture_radius
+  ap_x = double(npix_x)*randomu(seed)
+  ap_y = double(npix_y)*randomu(seed)
+  xyad, hdr,ap_x, ap_y, ap_ra, ap_dec
+  ap_ras[ap] = ap_ra
+  ap_decs[ap] = ap_dec
+
+  ; get list of galaxy IDs in each mag bin for this aperture
+  ap_galaxy_maglist = list()
+  FOR mag=brightestmag, dimmestmag, binsize DO BEGIN
+    ap_galaxies_binned=get_galaxies_binned(ap_ra, ap_dec, ap_radius, data, mag, mag+binsize)
+    ap_galaxy_maglist.Add, ap_galaxies_binned
+  ENDFOR 
+  ; put the list of ID numbers per mag bin in this aperture into the mega list for all apertures:
+  megalist.Add, ap_galaxy_maglist   
+
+  ; get number of galaxies in each bin and error for this aperture 
+  FOR i=0, nbins-1. DO BEGIN
+    bin = ap_galaxy_maglist[i]
+    IF (bin[0] EQ -1) THEN ngal = 0. ELSE ngal = n_elements(bin) 
+    ap_ngal_binned[i,ap] = ngal 
+    ap_ngalerr_binned[i,ap] = Poisson_error(ngal)
+  ENDFOR 
+
+ENDFOR
+
+
+; calculate densities in each bin in each aperture and errors: 
+ap_densities = double(ap_ngal_binned)/(!dPI*ap_radius^2.)           ; array of the densities in each aperture in each mag bin
+ap_density_errors = double(ap_ngalerr_binned)/(!dPI*ap_radius^2.)   ; same as above except errors 
+; average the densities of all the apertures in each bin to get average field density in each bin: 
+field_densities = total(ap_densities,2)/double(nApertures)             ; field density in each bin 
+field_density_errors = total(ap_density_errors,2)/double(nApertures)   ; errors in field density in each bin 
+
+; now, plot up the field density with errors
+window, 2, retain=2, xsize=1200, ysize=1000
+plot, mags, field_densities, title="Galaxies in Field", xtitle="magnitude (F140W)", ytitle="N!Igal!N per deg!E2!N per 0.5 mag", background=255, color=0, charsize=1.5, psym=-2, /ylog, yrange=[1d2,1d6], /ystyle 
+errplot, mags, field_densities-field_density_errors, field_densities+field_density_errors, color=0
+write_png, "fielddensity.png", tvrd(/true)
+
+; make a plot comparing blob to field with error bars 
+window, 3, retain=2, xsize=1200, ysize=1000
+plot, mags, densities, title="Galaxy Overdensity in Blob Region", xtitle="magnitude (F140W)", ytitle="N!Igal!N per deg!E2!N per 0.5 mag", background=255, color=0, charsize=2., psym=-2, /ylog, yrange=[1d2,1d6], /ystyle 
+errplot, mags, densities-density_errors, densities+density_errors, color=0
+oplot, mags, field_densities, color=0, psym=-2, linestyle=2
+errplot, mags, field_densities-field_density_errors, field_densities+field_density_errors, color=0
+LEGEND, ['blob','field'], /right, /top,color=0, textcolor=0, $ 
+    linestyle=[0,2], charsize=2. ;, thick=1.5   
+write_png, "overdensity.png", tvrd(/true)
 
 ; make histogram of densities (number of apertures in each density bin on y axis) & oplot blob density
-; make plot (galaxy magnitude and density)
-
 ; make sure to add IF statement accounting for edges of picture
 ; think about rejecting things that are on the blob
 
 END
+
+
+
+
+
+
+
+
+
 
 
 
@@ -129,6 +178,9 @@ END
 
 
 
+
+
+
 FUNCTION get_galaxies_binned, ra, dec, radius, data, brightmag, dimmag
   distance = sqrt(  ( (ra - data.ALPHA_J2000) * cos(dec*!dPI/180.) )^2. + (dec - data.DELTA_J2000)^2. )
   galaxies_in_aperture = WHERE (((distance LT radius) AND (data.CLASS_STAR LT 0.8) AND (data.IMAFLAGS_ISO EQ 0.) AND (data.MAG_ISO GE brightmag) AND (data.MAG_ISO LT dimmag)), n_galaxies)
@@ -137,10 +189,44 @@ END
 
 
 
+
+
+
 FUNCTION Poisson_error, ngal 
   error = sqrt(double(ngal))
   RETURN, error
 END 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
