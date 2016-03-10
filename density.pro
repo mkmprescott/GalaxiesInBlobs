@@ -18,7 +18,7 @@ blobdec = 35.18558333  ; declination of blob PRG1 in decimal degrees
 ap_radius = 10./3600.   ; aperture with radius of 10 arcsec in decimal degrees
 ; mag binning stuff:
 binsize=0.5
-brightestmag = 20.
+brightestmag = 22.
 dimmestmag = 35.
 nbins = (dimmestmag - brightestmag + binsize)/binsize
 mags = brightestmag + binsize*findgen(nbins)
@@ -68,20 +68,29 @@ FOR i=0, nbins-1. DO BEGIN
 ENDFOR 
 print, total(blob_ngal_binned), " total galaxies"   ; just a test to make sure it's working - this should match the previous no-bin number 
 
-; Now, plot up number in each bin with errors:
-window, 0, retain=2, xsize=1200, ysize=1000
-plot, mags, blob_ngal_binned, title="Galaxies in Blob Region", xtitle="magnitude (F140W)", ytitle="number of galaxies", background=255, color=0, charsize=1.5, psym=10, yrange=[0,15], /ystyle 
-errplot, mags, blob_ngal_binned-blob_ngalerr_binned, blob_ngal_binned+blob_ngalerr_binned, color=0
-write_png, "blobngal.png", tvrd(/true)
+makeplot = ''
+READ, makeplot, PROMPT='Make plot of number of galaxies in blob region? (y/n)'
+IF (makeplot EQ 'y') THEN BEGIN 
+  ; Now, plot up number in each bin with errors:
+  window, 0, retain=2, xsize=1200, ysize=1000
+  plot, mags, blob_ngal_binned, title="Galaxies in Blob Region", xtitle="magnitude (F140W)", ytitle="number of galaxies", background=255, color=0, charsize=1.5, psym=10, yrange=[0,15], /ystyle 
+  errplot, mags, blob_ngal_binned-blob_ngalerr_binned, blob_ngal_binned+blob_ngalerr_binned, color=0
+  write_png, "blobngal.png", tvrd(/true)
+ENDIF 
 
-; Finally, compute density and plot that with errors:
+; Finally, compute density and errors: 
 densities = double(blob_ngal_binned)/(!dPI*ap_radius^2.) 
 density_errors = double(blob_ngalerr_binned)/(!dPI*ap_radius^2.)
-window, 1, retain=2, xsize=1200, ysize=1000
-plot, mags, densities, title="Galaxies in Blob Region", xtitle="magnitude (F140W)", ytitle="N!Igal!N per deg!E2!N per 0.5 mag", background=255, color=0, charsize=1.5, psym=-2, /ylog, yrange=[1d4,1d6], /ystyle 
-errplot, mags, densities-density_errors, densities+density_errors, color=0
-write_png, "blobdensity.png", tvrd(/true)
 
+makeplot = ''
+READ, makeplot, PROMPT='Make plot of density of galaxies in blob region? (y/n)'
+IF (makeplot EQ 'y') THEN BEGIN 
+  ; plot density with errors:
+  window, 1, retain=2, xsize=1200, ysize=1000
+  plot, mags, densities, title="Galaxies in Blob Region", xtitle="magnitude (F140W)", ytitle="N!Igal!N per deg!E2!N per 0.5 mag", background=255, color=0, charsize=1.5, psym=-2, /ylog, yrange=[1d4,1d6], /ystyle 
+  errplot, mags, densities-density_errors, densities+density_errors, color=0
+  write_png, "blobdensity.png", tvrd(/true)
+ENDIF  
 
 
 
@@ -135,21 +144,40 @@ ap_density_errors = double(ap_ngalerr_binned)/(!dPI*ap_radius^2.)   ; same as ab
 field_densities = total(ap_densities,2)/double(nApertures)             ; field density in each bin 
 field_density_errors = total(ap_density_errors,2)/double(nApertures)   ; errors in field density in each bin 
 
-; now, plot up the field density with errors
-window, 2, retain=2, xsize=1200, ysize=1000
-plot, mags, field_densities, title="Galaxies in Field", xtitle="magnitude (F140W)", ytitle="N!Igal!N per deg!E2!N per 0.5 mag", background=255, color=0, charsize=1.5, psym=-2, /ylog, yrange=[1d2,1d6], /ystyle 
-errplot, mags, field_densities-field_density_errors, field_densities+field_density_errors, color=0
-write_png, "fielddensity.png", tvrd(/true)
+makeplot = ''
+READ, makeplot, PROMPT='Make plot of density of galaxies in field? (y/n)'
+IF (makeplot EQ 'y') THEN BEGIN 
+  ; now, plot up the field density with errors
+  window, 2, retain=2, xsize=1200, ysize=1000
+  plot, mags, field_densities, title="Galaxies in Field", xtitle="magnitude (F140W)", ytitle="N!Igal!N per deg!E2!N per 0.5 mag", background=255, color=0, charsize=1.5, psym=-2, /ylog, yrange=[1d2,1d6], /ystyle 
+  errplot, mags, field_densities-field_density_errors, field_densities+field_density_errors, color=0
+  write_png, "fielddensity.png", tvrd(/true)
+ENDIF 
 
+; set up vertices of polygon for polyfill
+ypoints=dblarr(2*nbins)
+ypoints[0:nbins-1] = field_densities-field_density_errors
+FOR i=0, nbins-1 DO BEGIN
+ypoints[i+nbins] = field_densities[nbins-1-i]+field_density_errors[nbins-1-i]
+ENDFOR
+xpoints = dblarr(2*nbins)
+xpoints[0:nbins-1] = mags
+FOR i=0, nbins-1 DO BEGIN
+ xpoints[i+nbins] = mags[nbins-1-i]
+ENDFOR
 ; make a plot comparing blob to field with error bars 
 window, 3, retain=2, xsize=1200, ysize=1000
-plot, mags, densities, title="Galaxy Overdensity in Blob Region", xtitle="magnitude (F140W)", ytitle="N!Igal!N per deg!E2!N per 0.5 mag", background=255, color=0, charsize=2., psym=-2, /ylog, yrange=[1d2,1d6], /ystyle 
+plot, mags, densities, title="Galaxy Overdensity in Blob Region", xtitle="magnitude (F140W)", ytitle="N!Igal!N per deg!E2!N per 0.5 mag", background=255, color=0, charsize=2., psym=-2, /ylog, yrange=[1d1,1d6], /ystyle 
+polyfill, xpoints, ypoints, color=200
 errplot, mags, densities-density_errors, densities+density_errors, color=0
+oplot, mags, densities, psym=-2, color=0
 oplot, mags, field_densities, color=0, psym=-2, linestyle=2
-errplot, mags, field_densities-field_density_errors, field_densities+field_density_errors, color=0
+;
+;errplot, mags, field_densities-field_density_errors, field_densities+field_density_errors, color=0
 LEGEND, ['blob','field'], /right, /top,color=0, textcolor=0, $ 
     linestyle=[0,2], charsize=2. ;, thick=1.5   
-write_png, "overdensity.png", tvrd(/true)
+;write_png, "overdensity.png", tvrd(/true)
+write_png, "overdensity1.png", tvrd(/true)
 
 ; make histogram of densities (number of apertures in each density bin on y axis) & oplot blob density
 ; make sure to add IF statement accounting for edges of picture
