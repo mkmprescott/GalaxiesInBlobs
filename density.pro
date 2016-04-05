@@ -6,9 +6,12 @@ FORWARD_FUNCTION get_galaxies
 FORWARD_FUNCTION rsex
 FORWARD_FUNCTION get_galaxies_binned
 FORWARD_FUNCTION Poisson_error
+FORWARD_FUNCTION get_galaxies_noblob
 
 
-data = rsex("setestF140W.cat")     
+datared = rsex("setestF140W.cat")    
+datamid = rsex("setestF814W.cat")
+datablue = rsex("setestF475W.cat")  
 ; will later modify this to be more automated
 
 ; HARD-CODED PARAMETERS: 
@@ -37,7 +40,7 @@ plotsym, 0, 1, /fill         ; makes the psym=8 symbol a filled circle for plott
 
 
 ; First, a test: get raw blob density, ie, number of galaxies inside aperture centered on blob with radius specified above with no mag bins yet
-blob_galaxies_all=get_galaxies(blobra, blobdec, ap_radius, data)
+blob_galaxies_all=get_galaxies(blobra, blobdec, ap_radius, datared)
 blob_ngalraw = n_elements(blob_galaxies_all)
 ; now get density in number of galaxies per square arcsecond 
 blobdensityraw = float(blob_ngalraw) / (!dPI*ap_radius^2.)    
@@ -47,6 +50,30 @@ print, blob_ngalraw, " galaxies in the blob region"
 ;  2722695.4 galaxies per square degree in blob region
 ;  66 galaxies in the blob region 
 
+window, 31, retain=2, xsize=1200, ysize=1000
+redmags = datared[blob_galaxies_all].MAG_ISO
+midmags = datamid[blob_galaxies_all].MAG_ISO
+bluemags = datablue[blob_galaxies_all].MAG_ISO
+; test to make sure this is working correctly: 
+;print, n_elements(redmags), n_elements(midmags), n_elements(bluemags), n_elements(blob_galaxies_all)
+; code prints 66 for all four - works fine 
+color_x = bluemags - midmags
+color_y = midmags - redmags
+plot, color_x, color_y, title="PRG1 Color-Color Diagram", xtitle="F475W - F814W", ytitle="F814W - F140W", background=255, color=0, charsize=1.5, psym=8, xrange=[-5,5], /xstyle, yrange=[-5,5], /ystyle 
+field_galaxies = get_galaxies_noblob(blobra, blobdec, ap_radius, datared)
+field_redmags = datared[field_galaxies].MAG_ISO
+field_midmags = datamid[field_galaxies].MAG_ISO
+field_bluemags = datablue[field_galaxies].MAG_ISO
+field_color_x = field_bluemags - field_midmags
+field_color_y = field_midmags - field_redmags
+oplot, field_color_x, field_color_y, color=0, psym=3
+LEGEND, ['blob galaxy','field galaxy'], /left, /bottom, color=0, textcolor=0, psym=[8,3], charsize=1., /box, outline_color=0 
+;dist = sqrt(  ( (blobra - datared.ALPHA_J2000) * cos(blobdec*!dPI/180.) )^2. + (blobdec - datared.DELTA_J2000)^2. )
+;color_x_all = datablue.MAG_ISO - datamid.MAG_ISO
+;weird = WHERE (((dist LT ap_radius) AND (datared.CLASS_STAR LT 0.8) AND (datared.IMAFLAGS_ISO EQ 0.) AND (color_x_all GT 2.)), n_galaxies)
+;print, datared[weird].ALPHA_J2000, datared[weird].DELTA_J2000
+;STOP
+write_png, "PRG1color-color.png", tvrd(/true)
 
 
 
@@ -55,7 +82,7 @@ print, blob_ngalraw, " galaxies in the blob region"
 
 galaxy_maglist = list()
 FOR mag=brightestmag, dimmestmag, binsize DO BEGIN
-  blob_galaxies_binned=get_galaxies_binned(blobra, blobdec, ap_radius, data, mag, mag+binsize)
+  blob_galaxies_binned=get_galaxies_binned(blobra, blobdec, ap_radius, datared, mag, mag+binsize)
   galaxy_maglist.Add, blob_galaxies_binned
 ENDFOR      ; Now we have a list containing arrays of the IDs of every galaxy in each mag bin, one array per bin
  
@@ -150,7 +177,7 @@ FOR ap=0, nApertures-1 DO BEGIN
   ; get list of galaxy IDs in each mag bin for this aperture
   ap_galaxy_maglist = list()
   FOR mag=brightestmag, dimmestmag, binsize DO BEGIN
-    ap_galaxies_binned=get_galaxies_binned(ap_ra, ap_dec, ap_radius, data, mag, mag+binsize)
+    ap_galaxies_binned=get_galaxies_binned(ap_ra, ap_dec, ap_radius, datared, mag, mag+binsize)
     ap_galaxy_maglist.Add, ap_galaxies_binned
   ENDFOR 
   ; put the list of ID numbers per mag bin in this aperture into the mega list for all apertures:
@@ -212,7 +239,9 @@ axis, color=0, xaxis=0, xrange=magrange, /xstyle, /data, charsize=0, xtickformat
 axis, color=0, yaxis=0, /ylog, yrange=[1d2,1d6], /ystyle,  /ynozero, /data, charsize=0, ytickformat="(A1)"
 ;write_png, "overdensity.png", tvrd(/true)
 ;write_png, "overdensity1.png", tvrd(/true)
-write_png, "overdensity2.png", tvrd(/true)
+write_png, "overdensity2.png", tvrd(/true) 
+
+ 
 
 
 END
@@ -234,6 +263,15 @@ FUNCTION get_galaxies, ra, dec, radius, data
   distance = sqrt(  ( (ra - data.ALPHA_J2000) * cos(dec*!dPI/180.) )^2. + (dec - data.DELTA_J2000)^2. )
   galaxies_in_aperture = WHERE (((distance LT radius) AND (data.CLASS_STAR LT 0.8) AND (data.IMAFLAGS_ISO EQ 0.)), n_galaxies)
   RETURN, galaxies_in_aperture
+END
+
+
+
+
+FUNCTION get_galaxies_noblob, ra, dec, radius, data
+  distance = sqrt(  ( (ra - data.ALPHA_J2000) * cos(dec*!dPI/180.) )^2. + (dec - data.DELTA_J2000)^2. )
+  galaxies_outside_aperture = WHERE (((distance GE radius) AND (data.CLASS_STAR LT 0.8) AND (data.IMAFLAGS_ISO EQ 0.)), n_galaxies)
+  RETURN, galaxies_outside_aperture
 END
 
 
