@@ -14,11 +14,11 @@ blobs = read_csv('blobs.csv', n_table_header=1)
 blobname = blobs.FIELD1
 blobra = blobs.FIELD2
 blobdec = blobs.FIELD3
-blueband = '/boomerang-data/alhall/LABoverdensity/GalaxiesInBlobs/'+blobs.FIELD4
-midband = '/boomerang-data/alhall/LABoverdensity/GalaxiesInBlobs/'+blobs.FIELD5
-redband = '/boomerang-data/alhall/LABoverdensity/GalaxiesInBlobs/'+blobs.FIELD6
-stack = '/boomerang-data/alhall/LABoverdensity/GalaxiesInBlobs/'+blobs.FIELD7
-mask = '/boomerang-data/alhall/LABoverdensity/GalaxiesInBlobs/'+blobs.FIELD8 
+blueband = '/boomerang-data/alhall/LABoverdensity/GalaxiesInBlobs/catalogs/'+blobs.FIELD4
+midband = '/boomerang-data/alhall/LABoverdensity/GalaxiesInBlobs/catalogs/'+blobs.FIELD5
+redband = '/boomerang-data/alhall/LABoverdensity/GalaxiesInBlobs/catalogs/'+blobs.FIELD6
+stack = '/boomerang-data/alhall/LABoverdensity/GalaxiesInBlobs/stacks/'+blobs.FIELD7
+mask = '/boomerang-data/alhall/LABoverdensity/GalaxiesInBlobs/stacks/'+blobs.FIELD8 
 nblobs = n_elements(blobname)        ; number of blobs in the blobs.csv file 
 ap_radius_arcsec = 10.               ; aperture with radius of 10 arcsec, in arcsec 
 ap_radius = ap_radius_arcsec/3600.   ; aperture with radius of 10 arcsec in decimal degrees
