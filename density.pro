@@ -7,6 +7,7 @@ FORWARD_FUNCTION rsex
 FORWARD_FUNCTION get_galaxies_binned
 FORWARD_FUNCTION Poisson_error
 FORWARD_FUNCTION get_galaxies_noblob
+FORWARD_FUNCTION colorsort
 
 ; read in the file containing all blob information
 blobs = read_csv('blobs.csv', n_table_header=1)
@@ -17,6 +18,7 @@ blobdec = blobs.FIELD03
 blueband = '/boomerang-data/alhall/LABoverdensity/GalaxiesInBlobs/catalogs/'+blobs.FIELD04
 midband = '/boomerang-data/alhall/LABoverdensity/GalaxiesInBlobs/catalogs/'+blobs.FIELD05
 redband = '/boomerang-data/alhall/LABoverdensity/GalaxiesInBlobs/catalogs/'+blobs.FIELD06
+
 stack = '/boomerang-data/alhall/LABoverdensity/GalaxiesInBlobs/stacks/'+blobs.FIELD07
 mask = '/boomerang-data/alhall/LABoverdensity/GalaxiesInBlobs/stacks/'+blobs.FIELD08 
 z = blobs.FIELD09           ; redshift
@@ -63,7 +65,20 @@ FOR blob=0, nblobs-2 DO BEGIN           ; eventually it will be nblobs-1 like us
   ; now get density in number of galaxies per square arcsecond 
   blobdensityraw = float(blob_ngalraw) / (!dPI*ap_radius^2.)    
   print, blobdensityraw, " galaxies per square degree in blob region for "+blobname[blob]  
-  print, blob_ngalraw, " galaxies in the blob region for "+blobname[blob]
+  print, blob_ngalraw, " galaxies in the blob region for "+blobname[blob] 
+
+
+
+  ; see if user wants to apply color cuts to data before continuing
+  xcolorall = datablue.MAG_ISO - datamid.MAG_ISO
+  ycolorall = datamid.MAG_ISO - datared.MAG_ISO
+  filter = ''
+  READ, filter, PROMPT='Do analysis for all galaxies, or include color cut? (y for color cut) ' 
+  IF (filter EQ 'y') THEN BEGIN 
+    datared = colorsort(datared, xcolorall, ycolorall, m[blob], b[blob], cap[blob]) 
+    datamid = colorsort(datamid, xcolorall, ycolorall, m[blob], b[blob], cap[blob]) 
+    datablue = colorsort(datablue, xcolorall, ycolorall, m[blob], b[blob], cap[blob]) 
+  ENDIF 
 
 
 
@@ -146,10 +161,11 @@ FOR blob=0, nblobs-2 DO BEGIN           ; eventually it will be nblobs-1 like us
   IF (saveplot EQ 'y') THEN BEGIN 
     namestring = string(blobname[blob]) + '_color-color_withcut.png'
     write_png, namestring, tvrd(/true)
-  ENDIF
+  ENDIF 
 
 
 
+  ; see if user wants to do the overdensity (ie, field sampling) stuff 
   proceed=''
   READ, proceed, PROMPT='Proceed with field density/overdensity analysis? (y/n)'
   IF (proceed EQ 'y') THEN BEGIN 
@@ -343,6 +359,15 @@ FUNCTION Poisson_error, ngal
   RETURN, error
 END 
 
+
+
+
+
+
+FUNCTION colorsort, data, xcolor, ycolor, m, b, c 
+  good = data[WHERE ((ycolor GE (xcolor*m + b)) OR (ycolor GE c))]
+  RETURN, good
+END 
 
 
 
