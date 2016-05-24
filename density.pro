@@ -1,12 +1,110 @@
+;                                                           /   \       
+; _                                                 )      ((   ))      (
+;(@)                                               /|\      ))_((      /|\                                                 _ 
+;|-|                                              / | \   <_`\|/`_>   / | \                                               (@)
+;| |---------------------------------------------/--|-voV--\<>|<>/--Vov-|--\----------------------------------------------|-|
+;|-|                                                  '^`   (> <)   '^`                                                   | |
+;| |                                                        `\Y/'                                                         |-|
+;|-| DENSITY.PRO                                                                                                          | |
+;| |   This code determines the density of galaxies within Lya blobs and surrounding fields                               |-|
+;|-|     to determine whether or not Lya blobs tend to be located in overdense regions.                                   | |
+;| |                                                                                                                      |-|
+;|-| INPUT:                                                                                                               | |
+;| |   blobs.csv - a comma-separated-variable file containing information about each Lya blob as follows:                 |-|
+;|-|       blob name (PRG1, PRG2, etc)                                                                                    | |
+;| |       RA of blob in decimal degrees                                                                                  |-|
+;|-|       declination of blob in decimal degrees                                                                         | |
+;| |       name of a SExtractor catalog (.cat file) run on a blue-band image of the blob (F606W or F475W) containing      |-|
+;|-|          all sources detected in a stacked image of the blob                                                         | |
+;| |       name of a SExtractor catalog (.cat file) run on a mid-band image of the blob (F814W) containing all sources    |-|
+;|-|          detected in a stacked image of the blob                                                                     | |
+;| |       name of a SExtractor catalog (.cat file) run on a red-band image of the blob (F140W) containing all sources    |-|
+;|-|          detected in a stacked image of the blob                                                                     | |
+;| |       name of a stack of all the images of the blob (a fits file)                                                    |-|
+;|-|       name of a bad pixel mask corresponding to the stack (fits file)                                                | |
+;| |       the redshift of the blob                                                                                       |-|
+;|-|       the slope of a line marking a simple color cut for determining blob membership (unitless)                      | |
+;| |       the y-intercept of the simple color cut line (unitless)                                                        |-|
+;|-|       a "cap" value for color cuts, above which all galaxy colors are consistent with the blob redshift (unitless)   | |
+;| |   ap_radius_arcsec - the radius in arcseconds of an aperture which defines the size of the Lya blob                  |-|
+;|-|   nApertures - a number of random apertures to be placed within the field to determine the average field density     | | 
+;| |                                                                                                                      |-|
+;|-| OUTPUT:                                                                                                              | |
+;| |   First, the SExtractir catalogs are read in using rsex (see online documentation) and bad pixel mask                |-|
+;|-|       is read in using mrdfits.                                                                                      | |
+;| |   After this initial reading-in, the raw number of galaxies within an aperture of the specified radius placed        |-|
+;|-|       at the blob coordinates is determined. A region file (for DS9) is created marking each blob galaxy. The        | |
+;| |       number density (number of galaxies per square degree) is also calculated.                                      |-|
+;|-|   Next, new catalogs are made which contain only sources with colors consistent with the blob redshift as            | |
+;| |       determined by a straight-line cut:                                                                             |-|
+;|-|       consistent (middle band - red band) >= b + m*(blue band - middle band)                                         | |
+;| |       and the refined number of galaxies within the blob is determined. A second region file containing only         |-|
+;|-|       post-color-cut blob galaxies is created.                                                                       | |
+;| |     color-color plot is created (middle band - red band vs blue band - middle band) showing the blob and field       |-|
+;|-|       galaxies, with the color cut line overlaid to indicate which sources are thrown out by the cuts. The user      | |
+;| |       may save this plot if desired.                                                                                 |-|
+;|-|   From this point onward, every step is run on both catalogs: before AND after color cuts.                           | |
+;| |   The number of galaxies in the blob is then split up into magnitude bins (from 22 to 35 in steps of 0.5) and        |-|
+;|-|       the Poisson error on the number of galaxies in each bin is calculated. The total number of galaxies (in        | |
+;| |       all bins, added up) is returned as a check to ensure that the mag binning process doesn't change the           |-|
+;|-|       total number of galaxies detected in the blob region. The number of galaxies per magnitude bin is then         | |
+;| |       converted into a number density of galaxies in number per square degree per 0.5 magnitudes and errors are      |-|
+;|-|       likewise converted from number to density.                                                                     | |
+;| |   The user is then asked whether or not to proceed with the analysis. This is for two reasons: because the process   |-|
+;|-|       of determining the average field density takes longer than other parts of the code, and because the user       | |
+;| |       may only want to create color-color plots or find the total number or density of blob galaxies. If the user    |-|
+;|-|       opts not to proceed, then the code moves on to the next blob.                                                  | |
+;| |   If the user chooses to proceed, then the code samples the field to determine the average field density. This       |-|
+;|-|       is done by placing a specified number (nApertures) of random apertures in the field around the blob and        | |
+;| |       counting up the number (with error bars) of galaxies in each aperture in each magnitude bin, converting        |-|
+;|-|       those numbers into densities (with error bars), and then averaging the densities of all the apertures for      | |
+;| |       a final count of average field density in every magnitude bin with errors.                                     |-|
+;|-|   When placing random apertures, the blob region is avoided, as are areas that contain only bad pixels. If the       | |
+;| |       random aperture lands in one of these forbidden areas, it is replaced until it lands in an area outside        |-|
+;|-|       the blob with at least one good pixel.                                                                         | |
+;| |   The bad pixel map of each blob is used to determine the actual effective area of each random aperture. Bad         |-|
+;|-|       pixels are masked and therefore don't contain data, so the fraction of good pixels in each aperture is         | |
+;| |       calculated and multiplied by the total aperture area to give the effective aperture area, which is the         |-|
+;|-|       area used in calculating the number density of galaxies within each random aperture.                           | |
+;| |   Once the average field density has been determined, a plot of the number density of galaxies vs magnitude          |-|
+;|-|       for both the blob and the field is made. The blob density is plotted as a solid line with error bars,          | |
+;| |       while the field density is plotted as a dashed line surrounded by a gray swath indicating errors. The          |-| 
+;|-|       user can choose whether or not to save this plot.                                                              | |
+;| |   A statistical luminosity function is also made to test the accuracy of the color cuts. This is done by making      |-|
+;|-|       histograms of the raw number of galaxies in the blob in each magnitude bin and the number of galaxies within   | |
+;| |       the blob in each magnitude bin after color cuts, and then overlaying a plot of the expected number of          |-|
+;|-|       galaxies in the blob as determined by subtracting the raw field density from the raw blob density and          | |
+;| |       converting the result into a number of galaxies in each magnitude bin (by multiplying by the area of the       |-|
+;|-|       aperture placed around the blob). The user may save this plot if desired.                                      | |
+;| |                                                                                                                      |-|
+;|-|                                                                                                                      | |
+;| | FUNCTIONS USED:                                                                                                      |-|
+;|-|   rsex - reads SExtractor catalogs into structures (see online documentation)                                        | |
+;| |   get_galaxies - finds which galaxies in a catalog are located within a specified (location and radius) aperture     |-|
+;|-|   get_galaxies_binned - does the same as get_galaxies, but sorts the returned galaxies into magnitude bins           | |
+;| |   get_galaxies_noblob - finds which galaxies in a catalog are located OUTSIDE a specified aperture                   |-|
+;|-|   Poisson_error - calculates the Poisson uncertainty of a number (noise = square root of signal)                     | |
+;| |   colorsort - filters a catalog by color cuts such that only galaxies with colors above the cut are returned         |-|
+;|-| Each of these functions is described in more detail in its own header.                                               | |
+;| |                                                                                                                      |-|
+;|-|                                                                                                                      | |
+;|_|______________________________________________________________________________________________________________________|-|
+;(@)                                          l   /\ /        ) )       \ /\   l                                        `\|_|
+;                                             l /   V        / /         V   \ l                                          (@)
+;                                             l/           _( (_              \I
+;                                                          `\ /'
+;                                                            V
+;-----------------------------------------------------------------------------------------------------------------------------
 PRO density
-;--------------------------------------------------------------------------------------------------
-;  some day this will include a nice thorough header and description... but not today
-;--------------------------------------------------------------------------------------------------
-FORWARD_FUNCTION get_galaxies
+
+; INITIAL SETUP 
+
+; notify IDL of all functions used in this procedure
 FORWARD_FUNCTION rsex
+FORWARD_FUNCTION get_galaxies
 FORWARD_FUNCTION get_galaxies_binned
-FORWARD_FUNCTION Poisson_error
 FORWARD_FUNCTION get_galaxies_noblob
+FORWARD_FUNCTION Poisson_error
 FORWARD_FUNCTION colorsort
 
 ; read in the file containing all blob information
@@ -18,32 +116,36 @@ blobdec = blobs.FIELD03
 blueband = '/boomerang-data/alhall/LABoverdensity/GalaxiesInBlobs/catalogs/'+blobs.FIELD04
 midband = '/boomerang-data/alhall/LABoverdensity/GalaxiesInBlobs/catalogs/'+blobs.FIELD05
 redband = '/boomerang-data/alhall/LABoverdensity/GalaxiesInBlobs/catalogs/'+blobs.FIELD06
-
 stack = '/boomerang-data/alhall/LABoverdensity/GalaxiesInBlobs/stacks/'+blobs.FIELD07
 mask = '/boomerang-data/alhall/LABoverdensity/GalaxiesInBlobs/stacks/'+blobs.FIELD08 
-z = blobs.FIELD09           ; redshift
-m = blobs.FIELD10           ; slope of color-cut line 
-b = blobs.FIELD11           ; y-intercept of color-cut line 
-cap = blobs.FIELD12         ; mag above which all colors are consistent with redshift
-nblobs = n_elements(blobname)        ; number of blobs in the blobs.csv file 
-ap_radius_arcsec = 10.               ; aperture with radius of 10 arcsec, in arcsec 
-ap_radius = ap_radius_arcsec/3600.   ; aperture with radius of 10 arcsec in decimal degrees
+z = blobs.FIELD09                 ; redshift
+m = blobs.FIELD10                 ; slope of color-cut line 
+b = blobs.FIELD11                 ; y-intercept of color-cut line 
+cap = blobs.FIELD12               ; mag above which all colors are consistent with redshift
+nblobs = n_elements(blobname)     ; number of blobs in the blobs.csv file 
+; define the radius of the aperture used to calculate density 
+ap_radius_arcsec = 10.                         ; aperture radius in arcsec 
+ap_radius = ap_radius_arcsec/3600.             ; aperture radius in decimal degrees
+pixelscale = 0.06                              ; arceseconds per pixel for our images
+ap_radius_pix = ap_radius_arcsec / pixelscale  ; aperture radius in pixels  
 ; mag binning stuff:
-binsize=0.5
-brightestmag = 22.
-dimmestmag = 35.
-nbins = (dimmestmag - brightestmag + binsize)/binsize
-mags = brightestmag + binsize*findgen(nbins)
-magrange=[brightestmag,dimmestmag]
+binsize=0.5             ; size of magnitude bins 
+brightestmag = 22.      ; smallest (brightest) magnitude of galaxies we can reasonably see in our images 
+dimmestmag = 35.        ; biggest (faintest) magnitude of galaxies we can reasonably see in our images 
+nbins = (dimmestmag - brightestmag + binsize)/binsize     ; the number of magnitude bins as determined from our range and binsize 
+mags = brightestmag + binsize*findgen(nbins)              ; an array of every magnitude being used 
+magrange=[brightestmag,dimmestmag]                        ; a two-element array containing only the endpoints of our magnitude range 
 ; for plots: make the psym=8 symbol a filled circle
 plotsym, 0, 1, /fill   
 ; random aperture stuff:
-nApertures = 1000.   ; number of random apertures to use in field density calculation
-apsnameplot = ', 1000 Apertures'    ; for plotting purposes 
-apsnamesave = '_1000aps'          ; for saving images
-pixelscale = 0.06   ; arceseconds per pixel
-ap_radius_pix = ap_radius_arcsec / pixelscale
+nApertures = 1000.                ; number of random apertures to use in field density calculation 
+apsnameplot = ', 1000 Apertures'  ; for plotting purposes 
+apsnamesave = '_1000aps'          ; for saving images 
 
+
+
+
+; DENSITY ANALYSIS FOR EACH BLOB 
 
 FOR blob=0, nblobs-1 DO BEGIN          
 
@@ -51,8 +153,7 @@ FOR blob=0, nblobs-1 DO BEGIN
   datablue = rsex(blueband[blob])    ; either F475W (PRG1 and PRG3) or F606W (PRG2)
   datamid = rsex(midband[blob])      ; F814W
   datared = rsex(redband[blob])      ; F140W
-
-  ; image = mrdfits(stack[blob],0,hdr)
+  ; establish info about the images
   bpm = mrdfits(mask[blob],0,hdr)    ; this is the mask image for weeding out bad pixels in field 
   sizeinfo = size(bpm)               ; the dimensions of the mask image in pixels 
   npix_x = sizeinfo[1]               ; number of pixels in mask in the x direction
@@ -60,19 +161,19 @@ FOR blob=0, nblobs-1 DO BEGIN
 
 
 
-  ; First, a test: get raw blob density, ie, number of galaxies inside aperture 
-  ;   centered on blob with radius specified above with no mag bins yet
+  ; First, a test: get raw blob density, ie, number of galaxies inside aperture centered on blob with radius specified above with no mag bins yet
   blob_galaxies_all=get_galaxies(blobra[blob], blobdec[blob], ap_radius, datared)
   blob_ngalraw = n_elements(blob_galaxies_all)
   ; now get density in number of galaxies per square arcsecond 
   blobdensityraw = float(blob_ngalraw) / (!dPI*ap_radius^2.)    
   print, blobdensityraw, " galaxies per square degree in blob region for "+blobname[blob]  
   print, blob_ngalraw, " galaxies in the blob region for "+blobname[blob] 
+  ; make a region file 
   cat = datared[blob_galaxies_all]
   filename = string(blobname[blob]) + '_beforecuts.reg'
   openw, 1, filename
   FOR i=0, n_elements(cat)-1 DO BEGIN 
-    printf, 1,'J2000; circle ', cat[i].alpha_j2000, cat[i].delta_j2000, ' 10p ';#text={', cat[i].number,'}'  
+    printf, 1,'J2000; circle ', cat[i].alpha_j2000, cat[i].delta_j2000, ' 10p '    ;#text={', cat[i].number,'}'  
   ENDFOR 
   close, 1
 
@@ -83,99 +184,16 @@ FOR blob=0, nblobs-1 DO BEGIN
   datamidcut = colorsort(datamid, xcolorall, ycolorall, m[blob], b[blob], cap[blob]) 
   databluecut = colorsort(datablue, xcolorall, ycolorall, m[blob], b[blob], cap[blob]) 
 
-
+  ; get the number of galaxies in the aperture AFTER color cuts
   blob_galaxies_all_cuts=get_galaxies(blobra[blob], blobdec[blob], ap_radius, dataredcut)
+  ; make a region file 
   cat = dataredcut[blob_galaxies_all_cuts]
   filename = string(blobname[blob]) + '_aftercuts.reg'
   openw, 1, filename
   FOR i=0, n_elements(cat)-1 DO BEGIN 
-    printf, 1,'J2000; circle ', cat[i].alpha_j2000, cat[i].delta_j2000, ' 10p ' ;#text={', cat[i].number,'}'  
+    printf, 1,'J2000; circle ', cat[i].alpha_j2000, cat[i].delta_j2000, ' 10p '   ;#text={', cat[i].number,'}'  
   ENDFOR 
-  close, 1
-
-
-
-
-
-
-
-  ; mag binning: 
-
-  galaxy_maglist = list()
-  FOR mag=brightestmag, dimmestmag, binsize DO BEGIN
-    blob_galaxies_binned=get_galaxies_binned(blobra[blob], blobdec[blob], ap_radius, datared, mag, mag+binsize)
-    galaxy_maglist.Add, blob_galaxies_binned
-  ENDFOR      ; Now we have a list containing arrays of the IDs of every galaxy in each mag bin, one array per bin
- 
-  blob_ngal_binned = dblarr(nbins)
-  blob_ngalerr_binned = dblarr(nbins) 
-
-  FOR i=0, nbins-1. DO BEGIN
-    bin = galaxy_maglist[i]
-    IF (bin[0] EQ -1) THEN ngal = 0. ELSE ngal = n_elements(bin) 
-    blob_ngal_binned[i] = ngal 
-    blob_ngalerr_binned[i] = Poisson_error(ngal) 
-  ENDFOR 
-  print, total(blob_ngal_binned), " total galaxies"   ; just a test to make sure it's working - this should match the previous no-bin number 
-
-  ; check with user whether to make a plot or not since this plot isn't completely necessary
-  makeplot = ''
-  READ, makeplot, PROMPT='Make plot of number of galaxies in blob region? (y/n)'
-  IF (makeplot EQ 'y') THEN BEGIN 
-    ; Now, plot up number in each bin with errors:
-    window, 0, retain=2, xsize=1200, ysize=1000
-    plot, mags, blob_ngal_binned, title=("Galaxies in Blob Region for " + blobname[blob]), xtitle="magnitude (F140W)", ytitle="number of galaxies", background=255, color=0, charsize=1.5, psym=10, yrange=[0,15], /ystyle, xrange=magrange, /xstyle 
-    errplot, mags, blob_ngal_binned-blob_ngalerr_binned, blob_ngal_binned+blob_ngalerr_binned, color=0
-    namestring = string(blobname[blob]) + '_blobngal.png'
-    write_png, namestring, tvrd(/true)
-  ENDIF 
-
-  ; Finally, compute density and errors: 
-  densities = double(blob_ngal_binned)/(!dPI*ap_radius^2.) 
-  density_errors = double(blob_ngalerr_binned)/(!dPI*ap_radius^2.)
-
-  ; check with user whether to make a plot or not since this plot isn't completely necessary
-  makeplot = ''
-  READ, makeplot, PROMPT='Make plot of density of galaxies in blob region? (y/n)'
-  IF (makeplot EQ 'y') THEN BEGIN 
-    ; plot density with errors:
-    window, 1, retain=2, xsize=1200, ysize=1000
-    plot, mags, densities, title=("Galaxies in Blob Region for " + blobname[blob]), xtitle="magnitude (F140W)", ytitle="N!Igal!N per deg!E2!N per 0.5 mag", background=255, color=0, charsize=1.5, psym=-8, /ylog, yrange=[1d4,1d6], /ystyle, xrange=magrange, /xstyle 
-    errplot, mags, densities-density_errors, densities+density_errors, color=0
-    namestring = string(blobname[blob]) + '_blobdensity.png'
-    write_png, namestring, tvrd(/true)
-  ENDIF  
-
-
-
-  ; now do the same thing with the color cuts
-  galaxy_maglist_cuts = list()
-  FOR mag=brightestmag, dimmestmag, binsize DO BEGIN
-    blob_galaxies_binned_cuts=get_galaxies_binned(blobra[blob], blobdec[blob], ap_radius, dataredcut, mag, mag+binsize)
-    galaxy_maglist_cuts.Add, blob_galaxies_binned_cuts
-  ENDFOR      ; Now we have a list containing arrays of the IDs of every galaxy in each mag bin, one array per bin
- 
-  blob_ngal_binned_cuts = dblarr(nbins)
-  blob_ngalerr_binned_cuts = dblarr(nbins) 
-
-  FOR i=0, nbins-1. DO BEGIN
-    bin = galaxy_maglist_cuts[i]
-    IF (bin[0] EQ -1) THEN ngal = 0. ELSE ngal = n_elements(bin) 
-    blob_ngal_binned_cuts[i] = ngal 
-    blob_ngalerr_binned_cuts[i] = Poisson_error(ngal) 
-  ENDFOR 
-  print, total(blob_ngal_binned_cuts), " total galaxies with color cut" 
-  ; Finally, compute density and errors: 
-  densities_cuts = double(blob_ngal_binned_cuts)/(!dPI*ap_radius^2.) 
-  density_errors_cuts = double(blob_ngalerr_binned_cuts)/(!dPI*ap_radius^2.)
-
-
-
-
-
-
-
-
+  close, 1 
 
 
 
@@ -187,7 +205,7 @@ FOR blob=0, nblobs-1 DO BEGIN
   color_x = bluemags - midmags
   color_y = midmags - redmags
   ; set up a plot 
-  window, 31, retain=2, xsize=400, ysize=300
+  window, 0, retain=2, xsize=400, ysize=300
   plot, color_x, color_y, title=(blobname[blob]+" Color-Color Diagram"), xtitle="blue - mid", ytitle="mid - red", background=255, color=0, charsize=1.5, thick=2,charthick=1,psym=8, xrange=[-5,5], /xstyle, yrange=[-5,5], /ystyle 
   field_galaxies = get_galaxies_noblob(blobra[blob], blobdec[blob], ap_radius, datared)
   field_redmags = datared[field_galaxies].MAG_ISO
@@ -204,21 +222,83 @@ FOR blob=0, nblobs-1 DO BEGIN
   saveplot = ''
   READ, saveplot, PROMPT='Save color-color plot? (y/n)'
   IF (saveplot EQ 'y') THEN BEGIN 
-    namestring = string(blobname[blob]) + '_color-color_withcut_new.png'
+    namestring = string(blobname[blob]) + '_color-color_withcut_small.png'
     write_png, namestring, tvrd(/true)
+  ENDIF ELSE IF ((saveplot NE 'y') AND (saveplot NE 'n')) THEN BEGIN 
+    WHILE ((saveplot NE 'y') AND (saveplot NE 'n')) DO BEGIN 
+      print, 'Invalid response. Choose y or n.' 
+      READ, saveplot, PROMPT='Save color-color plot? (y/n)'
+    ENDWHILE
+  ENDIF ELSE IF (saveplot EQ 'n') THEN BEGIN
+    print, 'Color-color plot not saved.'
   ENDIF 
+  wdelete, 0
+
+
+
+
+  ; MAG BINNING: 
+
+  galaxy_maglist = list()
+  FOR mag=brightestmag, dimmestmag, binsize DO BEGIN
+    blob_galaxies_binned=get_galaxies_binned(blobra[blob], blobdec[blob], ap_radius, datared, mag, mag+binsize)
+    galaxy_maglist.Add, blob_galaxies_binned
+  ENDFOR      ; Now we have a list containing arrays of the IDs of every galaxy in each mag bin, one array per bin
+  ; set up empty arrays containing the number of galaxies in each mag bin and corresponding Poisson errors
+  blob_ngal_binned = dblarr(nbins)
+  blob_ngalerr_binned = dblarr(nbins) 
+  ; fill in the empty arrays, ensuring that bins with 0 galaxies have error bars of 0 as well
+  FOR i=0, nbins-1. DO BEGIN
+    bin = galaxy_maglist[i]
+    IF (bin[0] EQ -1) THEN ngal = 0. ELSE ngal = n_elements(bin) 
+    blob_ngal_binned[i] = ngal 
+    blob_ngalerr_binned[i] = Poisson_error(ngal) 
+  ENDFOR 
+  print, total(blob_ngal_binned), " total galaxies"   ; just a test to make sure it's working - this should match the previous no-bin number 
+  ; Finally, compute density and errors: 
+  densities = double(blob_ngal_binned)/(!dPI*ap_radius^2.) 
+  density_errors = double(blob_ngalerr_binned)/(!dPI*ap_radius^2.)
+
+  ; now do the same thing with the color cuts
+  galaxy_maglist_cuts = list()
+  FOR mag=brightestmag, dimmestmag, binsize DO BEGIN
+    blob_galaxies_binned_cuts=get_galaxies_binned(blobra[blob], blobdec[blob], ap_radius, dataredcut, mag, mag+binsize)
+    galaxy_maglist_cuts.Add, blob_galaxies_binned_cuts
+  ENDFOR      ; Now we have a list containing arrays of the IDs of every galaxy in each mag bin, one array per bin
+  ; set up empty arrays containing the number of galaxies in each mag bin and corresponding Poisson errors
+  blob_ngal_binned_cuts = dblarr(nbins)
+  blob_ngalerr_binned_cuts = dblarr(nbins) 
+  ; fill in the empty arrays, ensuring that bins with 0 galaxies have error bars of 0 as well
+  FOR i=0, nbins-1. DO BEGIN
+    bin = galaxy_maglist_cuts[i]
+    IF (bin[0] EQ -1) THEN ngal = 0. ELSE ngal = n_elements(bin) 
+    blob_ngal_binned_cuts[i] = ngal 
+    blob_ngalerr_binned_cuts[i] = Poisson_error(ngal) 
+  ENDFOR 
+  print, total(blob_ngal_binned_cuts), " total galaxies with color cut"   ; to show how many galaxies are left after color cuts
+  ; Finally, compute density and errors: 
+  densities_cuts = double(blob_ngal_binned_cuts)/(!dPI*ap_radius^2.) 
+  density_errors_cuts = double(blob_ngalerr_binned_cuts)/(!dPI*ap_radius^2.)
+
+
 
 
 
   ; see if user wants to do the overdensity (ie, field sampling) stuff 
   proceed=''
   READ, proceed, PROMPT='Proceed with field density/overdensity analysis? (y/n)'
-  IF (proceed EQ 'y') THEN BEGIN 
+  IF (proceed EQ 'n') THEN BEGIN 
+    print, 'Moving on to the next blob.' 
+  ENDIF ELSE IF ((proceed NE 'y') AND (proceed NE 'n')) THEN BEGIN 
+    WHILE ((proceed NE 'y') AND (proceed NE 'n')) DO BEGIN 
+      print, 'Invalid response. Choose y or n.' 
+      READ, proceed, PROMPT='Proceed with field density/overdensity analysis? (y/n)'
+    ENDWHILE
+  ENDIF ELSE IF (proceed EQ 'y') THEN BEGIN 
 
+    ; SAMPLING THE FIELD with random apertures 
 
-
-    ; SAMPLING THE FIELD
-
+    ; set up the arrays which will contain all the information about the random apertures placed
     ap_ras = dblarr(nApertures)     ; this will contain RAs of all apertures
     ap_decs = dblarr(nApertures)    ; this will contain declinations of all apertures
     ap_ngal_binned = dblarr(nbins,nApertures)   ; this will contain # galaxies in each aperture in each mag bin
@@ -232,6 +312,7 @@ FOR blob=0, nblobs-1 DO BEGIN
     blankim = ap_radius_pix+fltarr(npix_x,npix_y)  
     ap_count = 0 ; keep track of how many apertures are made in total 
 
+    ; now place random apertures and count galaxies inside them 
     TIC        ; time this to ensure that it's efficient 
     FOR ap=0, nApertures-1 DO BEGIN
       repeatflag = 0.       ; this will ensure that apertures don't get wasted on areas with only bad pixels 
@@ -241,49 +322,32 @@ FOR blob=0, nblobs-1 DO BEGIN
         ap_x = floor(ap_radius_pix + (double(npix_x)-2.*ap_radius_pix)*randomu(seed))
         ap_y = floor(ap_radius_pix + (double(npix_y)-2.*ap_radius_pix)*randomu(seed))
 
+
         ; FIND BAD PIXELS:
-
-        ; OLD METHOD: 
-;        ; make an aperture image for the random aperture generated
-;        dist_ellipse, dim, [npix_x, npix_y], ap_x, ap_y, 1.,0.
-;        newap = dim       ; this will be used to overlap with the mask image
-        ; NEW METHOD: 
-        ; find corners of box in which to insert aperture image 
-        xlo = ap_x - floor(ap_radius_pix) 
-        xhi = ap_x + floor(ap_radius_pix) 
-        ylo = ap_y - floor(ap_radius_pix)  
-        yhi = ap_y + floor(ap_radius_pix)
-        ; create new image using array arithmetic: blank image with dim inserted into it 
-        newap = blankim 
-        newap[xlo:xhi,ylo:yhi] = dim 
-
-        index = where(newap LT ap_radius_pix) 
-        wheretomulti, newap, index, col, row, frame
-        newap[*,*] = 0. 
-        newap[col,row]  = 1. 
-
-        ; old method of doing the above: 
-;        FOR i=0, npix_x-1 DO BEGIN
-;          FOR j=0, npix_y-1 DO BEGIN
-;            IF (newap[i,j] LT ap_radius_pix) THEN BEGIN
-;                newap[i,j] = 1.          ; every pixel in the aperture has a value of 1
-;            ENDIF ELSE newap[i,j] = 0.   ; pixels outside the aperture are 0
-;          ENDFOR
-;        ENDFOR
-
-        ; multiply the aperture map by the bpm so only GOOD pixels INSIDE the aperture are left: 
-        apbpm = bpm*newap          
-        badpix = where(apbpm GT 0, nbadpix)   ; label the bad pixels
-        ntotalpix = n_elements(apbpm)         ; get the total number of pixels in the aperture
+         ; find corners of box in which to insert aperture image 
+         xlo = ap_x - floor(ap_radius_pix) 
+         xhi = ap_x + floor(ap_radius_pix) 
+         ylo = ap_y - floor(ap_radius_pix)  
+         yhi = ap_y + floor(ap_radius_pix)
+         ; create new image using array arithmetic: blank image with dim inserted into it 
+         newap = blankim 
+         newap[xlo:xhi,ylo:yhi] = dim 
+         ; ignore everything outside the random aperture to make aperture map 
+         index = where(newap LT ap_radius_pix) 
+         wheretomulti, newap, index, col, row, frame
+         newap[*,*] = 0. 
+         newap[col,row]  = 1. 
+         ; multiply the aperture map by the bpm so only GOOD pixels INSIDE the aperture are left: 
+         apbpm = bpm*newap          
+         badpix = where(apbpm GT 0, nbadpix)   ; label the bad pixels
+         ntotalpix = n_elements(apbpm)         ; get the total number of pixels in the aperture
 
         ; FIND VICINITY TO BLOB: 
-        xyad, hdr,ap_x, ap_y, ap_ra, ap_dec      ; convert pixels into coordnates in sky
+         xyad, hdr,ap_x, ap_y, ap_ra, ap_dec      ; convert pixels into coordnates in sky
+         ; find how close the aperture is to the blob:
+         vicinity = sqrt(  ( (blobra[blob] - ap_ra) * cos(blobdec[blob]*!dPI/180.) )^2. + (blobdec[blob] - ap_dec)^2. )
 
-        ; find how close the aperture is to the blob:
-        vicinity = sqrt(  ( (blobra[blob] - ap_ra) * cos(blobdec[blob]*!dPI/180.) )^2. + (blobdec[blob] - ap_dec)^2. )
-
-        ; if the aperture has at least some good pixels AND isn't near the blob, then keep it;
-        ;    otherwise, throw it out and make a new aperture  
+        ; if the aperture has at least some good pixels AND isn't near the blob, then keep it; otherwise, throw it out and make a new aperture  
         IF ((nbadpix LT ntotalpix) AND (vicinity GT 2.*ap_radius)) THEN BEGIN 
           repeatflag = 1. 
         ENDIF ELSE BEGIN 
@@ -321,7 +385,7 @@ FOR blob=0, nblobs-1 DO BEGIN
         ap_ngal_binned[i,ap] = ngal 
         ap_ngalerr_binned[i,ap] = Poisson_error(ngal)
       ENDFOR 
-
+      ; same as before but with color cuts 
       FOR i=0, nbins-1. DO BEGIN
         bin = ap_galaxy_maglist_cuts[i]
         IF (bin[0] EQ -1) THEN ngal = 0. ELSE ngal = n_elements(bin) 
@@ -341,18 +405,6 @@ FOR blob=0, nblobs-1 DO BEGIN
     field_densities = total(ap_densities,2)/double(nApertures)             ; field density in each bin 
     field_density_errors = total(ap_density_errors,2)/double(nApertures)   ; errors in field density in each bin 
 
-    ; check with user whether to make a plot or not since this plot isn't completely necessary
-    makeplot = ''
-    READ, makeplot, PROMPT='Make plot of density of galaxies in field? (y/n)'
-    IF (makeplot EQ 'y') THEN BEGIN 
-      ; now, plot up the field density with errors
-      window, 2, retain=2, xsize=1200, ysize=1000
-      plot, mags, field_densities, title=("Galaxies in Field for " + blobname[blob] + apsnameplot), xtitle="magnitude (F140W)", ytitle="N!Igal!N per deg!E2!N per 0.5 mag", background=255, color=0, charsize=1.5, psym=-8, /ylog, yrange=[1d2,1d6], /ystyle, xrange=magrange, /xstyle 
-      errplot, mags, field_densities-field_density_errors, field_densities+field_density_errors, color=0
-      namestring = string(blobname[blob]) + '_fielddensity' + apsnamesave + '.png'
-      write_png, namestring, tvrd(/true)
-    ENDIF 
-
 
     ; calculate densities in each bin in each aperture and errors WITH COLOR CUTS: 
     ap_densities_cuts = double(ap_ngal_binned_cuts)/(!dPI*ap_radius^2.*ap_area_weight)           ; array of the densities in each aperture in each mag bin
@@ -360,6 +412,7 @@ FOR blob=0, nblobs-1 DO BEGIN
     ; average the densities of all the apertures in each bin to get average field density in each bin: 
     field_densities_cuts = total(ap_densities_cuts,2)/double(nApertures)             ; field density in each bin 
     field_density_errors_cuts = total(ap_density_errors_cuts,2)/double(nApertures)   ; errors in field density in each bin 
+
 
 
     ; MAIN OVERDENSITY PLOT:
@@ -377,7 +430,7 @@ FOR blob=0, nblobs-1 DO BEGIN
     ENDFOR
 
     ; make the main plot comparing blob to field with error bars 
-    window, 3, retain=2, xsize=1200, ysize=1000
+    window, 1, retain=2, xsize=1200, ysize=1000
     title=("Galaxy Overdensity in Blob Region for " + blobname[blob] + apsnameplot)
     plot, mags, densities, xtitle="magnitude (F140W)", ytitle="N!Igal!N per deg!E2!N per 0.5 mag", title=title, xthick=2,ythick=2,background=255, color=0, charsize=2., psym=-8, /ylog, yrange=[1d3,1d6], /ystyle, xrange=[22.5,29.5], /xstyle, charthick=2 
     polyfill, xpoints, ypoints, color=200, clip=[22.5,1d3,29.5,1d6], /data, noclip=0
@@ -394,9 +447,15 @@ FOR blob=0, nblobs-1 DO BEGIN
     IF (saveplot EQ 'y') THEN BEGIN 
        namestring = string(blobname[blob]) + '_overdensity' + apsnamesave + '.png'
        write_png, namestring, tvrd(/true) 
+    ENDIF ELSE IF ((saveplot NE 'y') AND (saveplot NE 'n')) THEN BEGIN 
+      WHILE ((saveplot NE 'y') AND (saveplot NE 'n')) DO BEGIN 
+        print, 'Invalid response. Choose y or n.' 
+        READ, saveplot, PROMPT='Save overdensity plot? (y/n)'
+      ENDWHILE
+    ENDIF ELSE IF (saveplot EQ 'n') THEN BEGIN
+      print, 'Overdensity plot not saved.'
     ENDIF 
-
-
+    wdelete, 1
 
 
 
@@ -415,7 +474,7 @@ FOR blob=0, nblobs-1 DO BEGIN
     ENDFOR
 
     ; make the main plot comparing blob to field with error bars 
-    window, 4, retain=2, xsize=1200, ysize=1000
+    window, 2, retain=2, xsize=1200, ysize=1000
     title=("Galaxy Overdensity in Blob Region for " + blobname[blob] + apsnameplot) + ' (with color cuts)'
     plot, mags, densities_cuts, xtitle="magnitude (F140W)", ytitle="N!Igal!N per deg!E2!N per 0.5 mag", title=title,xthick=2,ythick=2,background=255, color=0, charsize=2., psym=-8, /ylog, yrange=[1d3,1d6], /ystyle, xrange=[22.5,29.5], /xstyle, charthick=2 
     polyfill, xpoints, ypoints, color=200, clip=[22.5,1d3,29.5,1d6], /data, noclip=0
@@ -432,11 +491,20 @@ FOR blob=0, nblobs-1 DO BEGIN
     IF (saveplot EQ 'y') THEN BEGIN 
        namestring = string(blobname[blob]) + '_overdensity' + apsnamesave + '_withcuts.png'
        write_png, namestring, tvrd(/true) 
+    ENDIF ELSE IF ((saveplot NE 'y') AND (saveplot NE 'n')) THEN BEGIN 
+      WHILE ((saveplot NE 'y') AND (saveplot NE 'n')) DO BEGIN 
+        print, 'Invalid response. Choose y or n.' 
+        READ, saveplot, PROMPT='Save overdensity plot? (y/n)'
+      ENDWHILE
+    ENDIF ELSE IF (saveplot EQ 'n') THEN BEGIN
+      print, 'Overdensity plot not saved.'
     ENDIF 
+    wdelete, 2
 
 
 
-    ; combine everything to make a statistical luminosity function
+    ; STATISTICAL LUMINOSITY FUNCTION 
+    ; combine everything from before to make this 
     xvertices = fltarr(2.0*n_elements(mags) + 2.)
     yvertices = fltarr(2.0*n_elements(mags) + 2.)
     xvertices[0] = brightestmag
@@ -456,7 +524,7 @@ FOR blob=0, nblobs-1 DO BEGIN
     ; now make statistical luminosity function
     overdensity = densities - field_densities
     n_overdensity = overdensity * (!dPI*ap_radius^2.)  ; convert to number
-    window, 5, retain=2, xsize=1200, ysize=1000
+    window, 3, retain=2, xsize=1200, ysize=1000
     title=("Statistical Luminosity Function for Galaxies in " + blobname[blob] + apsnameplot) 
     plot, mags, n_overdensity, background=255, color=0, charsize=2, linestyle=2, yrange=[0,10], /ystyle,xrange=[22,30],/xstyle, title=title, xtitle='magnitude (F140W)',ytitle='N!Igal!N'
     polyfill, xvertices,yvertices, color=220, clip=[22,0,30,10], /data, noclip=0
@@ -468,7 +536,16 @@ FOR blob=0, nblobs-1 DO BEGIN
     IF (saveplot EQ 'y') THEN BEGIN 
        namestring = string(blobname[blob]) + '_statlum' + apsnamesave + '.png'
        write_png, namestring, tvrd(/true) 
+    ENDIF ELSE IF ((saveplot NE 'y') AND (saveplot NE 'n')) THEN BEGIN 
+      WHILE ((saveplot NE 'y') AND (saveplot NE 'n')) DO BEGIN 
+        print, 'Invalid response. Choose y or n.' 
+        READ, saveplot, PROMPT='Save statistical luminosity function plot? (y/n)'
+      ENDWHILE
+    ENDIF ELSE IF (saveplot EQ 'n') THEN BEGIN
+      print, 'Statistical luminosity function plot not saved.'
     ENDIF 
+    wdelete, 3
+
 
 ;    ap_numbers_corrected = ap_densities*!dPI*ap_radius^2.
 ;    FOR i=0, nbins-1 DO BEGIN
@@ -516,8 +593,20 @@ END
 
 
 FUNCTION get_galaxies, ra, dec, radius, data
-  distance = sqrt(  ( (ra - data.ALPHA_J2000) * cos(dec*!dPI/180.) )^2. + (dec - data.DELTA_J2000)^2. )
-  galaxies_in_aperture = WHERE (((distance LT radius) AND (data.CLASS_STAR LT 0.8) AND (data.IMAFLAGS_ISO EQ 0.)), n_galaxies)
+;-------------------------------------------------------------------------------------------------------------------------------------------------
+; get_galaxies function
+; INPUTS: ra, dec - the RA and declination of a point at which to place an aperture 
+;         radius - the radius of the aperture placed at the given coordinates
+;         data - a SExtractor catalog of sources which contains each source's RA, declination, a flag indicating what type of object it is, 
+;                  and a flag indicating whether or not there are any bad pixels in the source in the original image
+; OUTPUT: galaxies_in_aperture - the index numbers of the galaxies in the data catalog which are located within the specified aperture 
+; NOTES: The output is found by determining the distance between the aperture's center and each source, then requiring that distance to be less
+;           than the radius of the aperture, filtering out all objects which are marked as stars in the catalog, and filtering out all objects 
+;           with flags that indicate that they lie in areas of bad pixels. This ensures that only real sources that are galaxies are returned. 
+;-------------------------------------------------------------------------------------------------------------------------------------------------
+  distance = sqrt(  ( (ra - data.ALPHA_J2000) * cos(dec*!dPI/180.) )^2. + (dec - data.DELTA_J2000)^2. )         ; Pythagorean theorem 
+  ; the source has to be contained within the aperture, has to be a galaxy (no stars), and has to have good data (no bad pixels) 
+  galaxies_in_aperture = WHERE (((distance LT radius) AND (data.CLASS_STAR LT 0.8) AND (data.IMAFLAGS_ISO EQ 0.)), n_galaxies)  
   RETURN, galaxies_in_aperture
 END
 
@@ -525,7 +614,20 @@ END
 
 
 FUNCTION get_galaxies_noblob, ra, dec, radius, data
-  distance = sqrt(  ( (ra - data.ALPHA_J2000) * cos(dec*!dPI/180.) )^2. + (dec - data.DELTA_J2000)^2. )
+;-------------------------------------------------------------------------------------------------------------------------------------------------
+; get_galaxies_noblob function
+; INPUTS: ra, dec - the RA and declination of a point at which to place an aperture 
+;         radius - the radius of the aperture placed at the given coordinates
+;         data - a SExtractor catalog of sources which contains each source's RA, declination, a flag indicating what type of object it is, 
+;                  and a flag indicating whether or not there are any bad pixels in the source in the original image
+; OUTPUT: galaxies_outside_aperture - the index numbers of the galaxies in the data catalog which are located OUTSIDE the specified aperture 
+; NOTES: The output is found by determining the distance between the aperture's center and each source, then requiring that distance to be greater
+;           than the radius of the aperture, filtering out all objects which are marked as stars in the catalog, and filtering out all objects 
+;           with flags that indicate that they lie in areas of bad pixels. This ensures that only real sources that are galaxies are returned. 
+;        This function essentially does the exact opposite of what get_galaxies does. 
+;-------------------------------------------------------------------------------------------------------------------------------------------------
+  distance = sqrt(  ( (ra - data.ALPHA_J2000) * cos(dec*!dPI/180.) )^2. + (dec - data.DELTA_J2000)^2. )         ; Pythagorean theorem 
+  ; the source has to be located outside the aperture, has to be a galaxy (no stars), and has to have good data (no bad pixels) 
   galaxies_outside_aperture = WHERE (((distance GE radius) AND (data.CLASS_STAR LT 0.8) AND (data.IMAFLAGS_ISO EQ 0.)), n_galaxies)
   RETURN, galaxies_outside_aperture
 END
@@ -536,7 +638,23 @@ END
 
 
 FUNCTION get_galaxies_binned, ra, dec, radius, data, brightmag, dimmag
-  distance = sqrt(  ( (ra - data.ALPHA_J2000) * cos(dec*!dPI/180.) )^2. + (dec - data.DELTA_J2000)^2. )
+;------------------------------------------------------------------------------------------------------------------------------------------------
+; get_galaxies function
+; INPUTS: ra, dec - the RA and declination of a point at which to place an aperture 
+;         radius - the radius of the aperture placed at the given coordinates
+;         data - a SExtractor catalog of sources which contains each source's RA, declination, magnitude, a flag indicating what type of object 
+;                  it is, and a flag indicating whether or not there are any bad pixels in the source in the original image
+;         brightmag - the lower bound (brightest magnitude) of a magnitude range (bin) 
+;         dimmag - the upper bound (faintest magnitude) of a magnitude range (bin) 
+; OUTPUT: galaxies_in_aperture - the index numbers of the galaxies in the data catalog which are located within the specified aperture and have
+;                                  magnitudes between brightmag and dimmag
+; NOTES: The output is found by determining the distance between the aperture's center and each source, then requiring that distance to be less
+;           than the radius of the aperture, filtering out all objects which are marked as stars in the catalog, filtering out all objects 
+;           with flags that indicate that they lie in areas of bad pixels, and filtering out all objects with magnitudes outside the range set
+;           by brightmag and dimmag. This ensures that only real sources that are galaxies with specific magnitudes are returned. 
+;------------------------------------------------------------------------------------------------------------------------------------------------
+  distance = sqrt(  ( (ra - data.ALPHA_J2000) * cos(dec*!dPI/180.) )^2. + (dec - data.DELTA_J2000)^2. )         ; Pythagorean theorem 
+  ; the source has to be contained within the aperture, has to be a galaxy (no stars), has to have good data (no bad pixels), and has to have a magnitude between brightmag and dimmag  
   galaxies_in_aperture = WHERE (((distance LT radius) AND (data.CLASS_STAR LT 0.8) AND (data.IMAFLAGS_ISO EQ 0.) AND (data.MAG_ISO GE brightmag) AND (data.MAG_ISO LT dimmag)), n_galaxies)
   RETURN, galaxies_in_aperture
 END
@@ -547,6 +665,11 @@ END
 
 
 FUNCTION Poisson_error, ngal 
+;------------------------------------------------------------------------------------------------------------------------------------------------
+; Poisson_error function 
+; INPUT: ngal - a number (of galaxies) for which we want to determine uncertainty
+; OUTPUT: error - the Poisson error on the input number (the square root of the input: N = sqrt(S) ) 
+;------------------------------------------------------------------------------------------------------------------------------------------------
   error = sqrt(double(ngal))
   RETURN, error
 END 
@@ -557,62 +680,41 @@ END
 
 
 FUNCTION colorsort, data, xcolor, ycolor, m, b, c 
+;------------------------------------------------------------------------------------------------------------------------------------------------
+; colorsort function
+;   Applies a simple linear (y >= mx + b) color cut to a catalog made by SExtractor. 
+; INPUTS: data - a SExtractor catalog of sources
+;         xcolor - an array containing the blue-middle band color of every source in the data catalog 
+;         ycolor - an array containing the middle-red band color of every source in the data catalog 
+;         m - the slope of a line marking a simple color cut (unitless)  
+;         b - the y-intercept of the simple color cut line (unitless)    
+;         c - a "cap" value for color cuts, above which all colors are considered "good" (unitless)
+; OUTPUT: good - the index numbers of all the sources in the data catalog with colors above the cut
+; NOTES: The cut made is illustrated below. Asterisks mark "good" sources, while periods mark sources that get thrown out by the cut. 
+;                               
+;                               |   *     *    *      *
+;                               |      *          *      *
+;                             c-|   *    *   __________________
+;                               |  *        / .     .    .  .
+;                      ycolor   |    *     /.    .        .
+;                               |         /   .      ..      .
+;                               |     *  /     .  .    .   .
+;                               | *     /   .   .   .    .    
+;                               |   *  /       .   . .  .    .
+;                               |_____/________________________
+;                     (y = mx + b)----^       xcolor            
+;------------------------------------------------------------------------------------------------------------------------------------------------
   good = data[WHERE ((ycolor GE (xcolor*m + b)) OR (ycolor GE c))]
   RETURN, good
 END 
+  
 
 
 
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+; NOTE: THE FOLLOWING FUNCTION WAS NOT WRITTEN BY AGNAR. 
 ;+
 ; NAME:
 ;       RSEX()
@@ -814,3 +916,64 @@ FUNCTION rsex,catalog, use_row=use_row
      
      return,cs
 END 
+
+
+
+
+
+;
+;                                   ||`-.___
+;                                   ||    _.>
+;                                   ||_.-'
+;               ==========================================
+;                `.:::::::.       `:::::::.       `:::::::.
+;                  \:::::::.        :::::::.        :::::::\
+;                   L:::::::     AGNAR L HALL        :::::::L
+;                   J::::::::        ::::::::        :::::::J
+;                    F:::::::        ::::::::        ::::::::L
+;                    |:::::::        ::::::::        ::::::::|
+;                    |:::::::        ::::::::        ::::::::|    ^..---.__
+;                    |:::::::        ::::::::        ::::::::|   |  <)    -`.
+;                    |:::::::        ::::::::        ::::::::|   |    /^^^^/
+;     __             |:::::::        ::::::::        ::::::::|    \ . \vvv\
+;   .'_ \            |:::::::        ::::::::        ::::::::|     \ `----`
+;   (( ) |           |:::::::        ::::::::        ::::::::|      \ `.
+;    `/ /            |:::::::        ::::::::        ::::::::|       L  \
+;    / /             |:::::::        ::::::::        ::::::::|       |   \
+;   J J              |:::::::        ::::::::        ::::::::|       |    L
+;   | |              |:::::::        ::::::::        ::::::::|       |    |
+;   | |              |:::::::        ::::::::        ::::::::|       F    |
+;   | J\             F:::::::        ::::::::        ::::::::F      /     |
+;   |  L\           J::::::::       .::::::::       .:::::::J      /      F
+;   J  J `.     .   F:::::::        ::::::::        ::::::::F    .'      J
+;    L  \  `.  //  /:::::::'      .::::::::'      .::::::::/   .'        F
+;    J   `.  `//_..---.   .---.   .---.   .---.   .---.   <---<         J
+;     L    `-//_=/  _  \=/  _  \=/  _  \=/  _  \=/  _  \=/  _  \       /
+;     J     /|  |  (_)  |  (_)  |  (_)  |  (_)  |  (_)  |  (_)  |     /
+;      \   / |   \     //\     //\     //\     //\     //\     /    .'
+;       \ / /     `---//  `---//  `---//  `---//  `---//  `---'   .'
+;________/_/_________//______//______//______//______//_________.'_________
+;##########################################################################
+;
+;
+;
+;   CODE APPROVED BY DOGE
+;░░░░░░░░░▄░░░░░░░░░░░░░░▄░░░░
+;░░░░░░░░▌▒█░░░░░░░░░░░▄▀▒▌░░░
+;░░░░░░░░▌▒▒█░░░░░░░░▄▀▒▒▒▐░░░
+;░░░░░░░▐▄▀▒▒▀▀▀▀▄▄▄▀▒▒▒▒▒▐░░░
+;░░░░░▄▄▀▒░▒▒▒▒▒▒▒▒▒█▒▒▄█▒▐░░░
+;░░░▄▀▒▒▒░░░▒▒▒░░░▒▒▒▀██▀▒▌░░░
+;░░▐▒▒▒▄▄▒▒▒▒░░░▒▒▒▒▒▒▒▀▄▒▒▌░░
+;░░▌░░▌█▀▒▒▒▒▒▄▀█▄▒▒▒▒▒▒▒█▒▐░░
+;░▐░░░▒▒▒▒▒▒▒▒▌██▀▒▒░░░▒▒▒▀▄▌░
+;░▌░▒▄██▄▒▒▒▒▒▒▒▒▒░░░░░░▒▒▒▒▌░
+;▀▒▀▐▄█▄█▌▄░▀▒▒░░░░░░░░░░▒▒▒▐░
+;▐▒▒▐▀▐▀▒░▄▄▒▄▒▒▒▒▒▒░▒░▒░▒▒▒▒▌
+;▐▒▒▒▀▀▄▄▒▒▒▄▒▒▒▒▒▒▒▒░▒░▒░▒▒▐░
+;░▌▒▒▒▒▒▒▀▀▀▒▒▒▒▒▒░▒░▒░▒░▒▒▒▌░
+;░▐▒▒▒▒▒▒▒▒▒▒▒▒▒▒░▒░▒░▒▒▄▒▒▐░░
+;░░▀▄▒▒▒▒▒▒▒▒▒▒▒░▒░▒░▒▄▒▒▒▒▌░░
+;░░░░▀▄▒▒▒▒▒▒▒▒▒▒▄▄▄▀▒▒▒▒▄▀░░░
+;░░░░░░▀▄▄▄▄▄▄▀▀▀▒▒▒▒▒▄▄▀░░░░░
+;░░░░░░░░░▒▒▒▒▒▒▒▒▒▒▀▀░░░░░░░░
