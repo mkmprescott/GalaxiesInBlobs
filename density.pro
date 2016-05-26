@@ -131,7 +131,7 @@ ap_radius_pix = ap_radius_arcsec / pixelscale  ; aperture radius in pixels
 ; mag binning stuff:
 binsize=0.5             ; size of magnitude bins 
 brightestmag = 22.      ; smallest (brightest) magnitude of galaxies we can reasonably see in our images 
-dimmestmag = 35.        ; biggest (faintest) magnitude of galaxies we can reasonably see in our images 
+dimmestmag = 30.        ; biggest (faintest) magnitude of galaxies we can reasonably see in our images 
 nbins = (dimmestmag - brightestmag + binsize)/binsize     ; the number of magnitude bins as determined from our range and binsize 
 mags = brightestmag + binsize*findgen(nbins)              ; an array of every magnitude being used 
 magrange=[brightestmag,dimmestmag]                        ; a two-element array containing only the endpoints of our magnitude range 
@@ -547,25 +547,76 @@ FOR blob=0, nblobs-1 DO BEGIN
     wdelete, 3
 
 
-;    ap_numbers_corrected = ap_densities*!dPI*ap_radius^2.
-;    FOR i=0, nbins-1 DO BEGIN
-;      n_in_aps = fltarr(nApertures)
-;      n_in_aps[*] = ap_numbers_corrected[i,*]
-;      checker = WHERE(n_in_aps NE 0, /null)
-;      IF (checker NE !null) THEN BEGIN
-;        window, i, retain=2, xsize=1200, ysize=1000
-;        title = 'Galaxy Number Density in Apertures for Galaxies between Magnitudes ' + string(mags[i], format='(F4.1)') + ' and ' + string(mags[i]+binsize, format='(F4.1)')
-;        plothist, n_in_aps, background=255, color=0, xtitle='n galaxies in aperture', ytitle='number of apertures', title=title, axiscolor=0, bin=1, xrange=[0,100], /xstyle
-;        saveplot = ''
-;        READ, saveplot, PROMPT='Save this plot? (y/n)'
-;        IF (saveplot EQ 'y') THEN BEGIN 
-;         namestring = string(blobname[blob]) + '_' + string(mags[i], format='(F4.1)') + '_aphist.png'
-;         write_png, namestring, tvrd(/true) 
-;        ENDIF 
-;      ENDIF ELSE print, "no apertures contain any galaxies with magnitudes between ", string(mags[i], format='(F4.1)'), " and ", string(mags[i]+binsize, format='(F4.1)')
-;    ENDFOR
-;    ;ap_ngal_binned = dblarr(nbins,nApertures)   ; contains # galaxies in each aperture in each mag bin
-;    ;ap_densities = double(ap_ngal_binned)/(!dPI*ap_radius^2.*ap_area_weight)           ; array of the densities in each aperture in each mag bin
+   ; How likely is it to find overdensities in this field anyway? 
+    ap_numbers_corrected = ap_densities*!dPI*ap_radius^2.
+    ap_numbers_corrected_cuts = ap_densities_cuts*!dPI*ap_radius^2.
+    ap_totals = total(ap_numbers_corrected,1)    ; total number of galaxies in each aperture regardless of magnitude
+    ap_totals_cuts = total(ap_numbers_corrected_cuts,1)    ; total number of galaxies in each aperture regardless of magnitude
+    ; compare total numbers (regardless of magnitude) to blob, no cuts
+    window, 4, retain=2, xsize=1200, ysize=1000 
+    plothist, ap_totals, background=255, color=0, title="Number of Galaxies in Apertures, No Cuts", xtitle='n galaxies in aperture', ytitle='number of apertures', axiscolor=0, bin=1,xrange=[0,50], /xstyle
+    blobgaltext = 'blob: ' + string(fix(total(blob_ngal_binned))) + ' total galaxies' 
+    xyouts, 30., nApertures/10., blobgaltext, color=0, charsize=1.5
+    saveplot = ''
+    READ, saveplot, PROMPT='Save this plot? (y/n)'
+    IF (saveplot EQ 'y') THEN BEGIN 
+      namestring = string(blobname[blob]) + '_aphist' + apsnamesave + '.png'
+      write_png, namestring, tvrd(/true) 
+    ENDIF 
+    wdelete, 4
+    ; compare total numbers (regardless of magnitude) to blob WITH cuts
+    window, 5, retain=2, xsize=1200, ysize=1000 
+    plothist, ap_totals_cuts, background=255, color=0, title="Number of Galaxies in Apertures with Cuts", xtitle='n galaxies in aperture', ytitle='number of apertures', axiscolor=0, bin=1,xrange=[0,50], /xstyle
+    blobgaltext = 'blob: ' + string(fix(total(blob_ngal_binned_cuts))) + ' total galaxies' 
+    xyouts, 30., nApertures/10., blobgaltext, color=0, charsize=1.5
+    saveplot = ''
+    READ, saveplot, PROMPT='Save this plot? (y/n)'
+    IF (saveplot EQ 'y') THEN BEGIN 
+      namestring = string(blobname[blob]) + '_aphist' + apsnamesave + '_cuts.png'
+      write_png, namestring, tvrd(/true) 
+    ENDIF 
+    wdelete, 5
+
+
+    FOR i=0, nbins-1 DO BEGIN
+      n_in_aps = fltarr(nApertures)
+      n_in_aps[*] = ap_numbers_corrected[i,*]
+      checker = WHERE(n_in_aps NE 0, /null)
+      IF (checker NE !null) THEN BEGIN
+        window, i, retain=2, xsize=1200, ysize=1000
+        title = 'Galaxy Number Density in Apertures for Galaxies between Magnitudes ' + string(mags[i], format='(F4.1)') + ' and ' + string(mags[i]+binsize, format='(F4.1)') + ' for ' + blobname[blob] + ', no cuts'
+        plothist, n_in_aps, background=255, color=0, xtitle='n galaxies in aperture', ytitle='number of apertures', title=title, axiscolor=0, bin=1, xrange=[0,50], /xstyle
+        blobgaltext = 'blob: ' + string(fix(blob_ngal_binned[i])) + ' galaxies in this bin'
+        xyouts, 30., nApertures/10., blobgaltext, color=0, charsize=1.5
+        saveplot = ''
+        READ, saveplot, PROMPT='Save this plot? (y/n)'
+        IF (saveplot EQ 'y') THEN BEGIN 
+         namestring = string(blobname[blob]) + '_' + string(mags[i], format='(F4.1)') + '_aphist.png'
+         write_png, namestring, tvrd(/true) 
+        ENDIF 
+        wdelete, i
+      ENDIF ELSE print, "no apertures contain any galaxies with magnitudes between ", string(mags[i], format='(F4.1)'), " and ", string(mags[i]+binsize, format='(F4.1)'), ' without cuts'
+      ; now do the same for the cuts 
+      n_in_aps_cuts = fltarr(nApertures)
+      n_in_aps_cuts[*] = ap_numbers_corrected_cuts[i,*]
+      checker = WHERE(n_in_aps_cuts NE 0, /null)
+      IF (checker NE !null) THEN BEGIN
+        window, i, retain=2, xsize=1200, ysize=1000
+        title = 'Galaxy Number Density in Apertures for Galaxies between Magnitudes ' + string(mags[i], format='(F4.1)') + ' and ' + string(mags[i]+binsize, format='(F4.1)') + ' for ' + blobname[blob] + ', with cuts'
+        plothist, n_in_aps_cuts, background=255, color=0, xtitle='n galaxies in aperture', ytitle='number of apertures', title=title, axiscolor=0, bin=1, xrange=[0,50], /xstyle
+        blobgaltext = 'blob: ' + string(fix(blob_ngal_binned_cuts[i])) + ' galaxies in this bin'
+        xyouts, 30., nApertures/10., blobgaltext, color=0, charsize=1.5
+        saveplot = ''
+        READ, saveplot, PROMPT='Save this plot? (y/n)'
+        IF (saveplot EQ 'y') THEN BEGIN 
+         namestring = string(blobname[blob]) + '_' + string(mags[i], format='(F4.1)') + '_aphist_cuts.png'
+         write_png, namestring, tvrd(/true) 
+        ENDIF 
+        wdelete, i
+      ENDIF ELSE print, "no apertures contain any galaxies with magnitudes between ", string(mags[i], format='(F4.1)'), " and ", string(mags[i]+binsize, format='(F4.1)'), ' with cuts'
+    ENDFOR
+    ;ap_ngal_binned = dblarr(nbins,nApertures)   ; contains # galaxies in each aperture in each mag bin
+    ;ap_densities = double(ap_ngal_binned)/(!dPI*ap_radius^2.*ap_area_weight)           ; array of the densities in each aperture in each mag bin
 
 
 
