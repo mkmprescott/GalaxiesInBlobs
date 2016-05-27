@@ -186,6 +186,8 @@ FOR blob=0, nblobs-1 DO BEGIN
 
   ; get the number of galaxies in the aperture AFTER color cuts
   blob_galaxies_all_cuts=get_galaxies(blobra[blob], blobdec[blob], ap_radius, dataredcut)
+  blob_galaxies_all_cuts_mid=get_galaxies(blobra[blob], blobdec[blob], ap_radius, datamidcut)
+  blob_galaxies_all_cuts_blue=get_galaxies(blobra[blob], blobdec[blob], ap_radius, databluecut)
   ; make a region file 
   cat = dataredcut[blob_galaxies_all_cuts]
   filename = string(blobname[blob]) + '_aftercuts.reg'
@@ -240,45 +242,95 @@ FOR blob=0, nblobs-1 DO BEGIN
   ; MAG BINNING: 
 
   galaxy_maglist = list()
+  galaxy_maglist_mid = list()
+  galaxy_maglist_blue = list()
   FOR mag=brightestmag, dimmestmag, binsize DO BEGIN
-    blob_galaxies_binned=get_galaxies_binned(blobra[blob], blobdec[blob], ap_radius, datared, mag, mag+binsize)
+    ; red band 
+    blob_galaxies_binned = get_galaxies_binned(blobra[blob], blobdec[blob], ap_radius, datared, mag, mag+binsize)
     galaxy_maglist.Add, blob_galaxies_binned
-  ENDFOR      ; Now we have a list containing arrays of the IDs of every galaxy in each mag bin, one array per bin
+    ; middle band 
+    blob_galaxies_binned_mid = get_galaxies_binned(blobra[blob], blobdec[blob], ap_radius, datamid, mag, mag+binsize)
+    galaxy_maglist_mid.Add, blob_galaxies_binned_mid
+    ; blue band 
+    blob_galaxies_binned_blue = get_galaxies_binned(blobra[blob], blobdec[blob], ap_radius, datablue, mag, mag+binsize)
+    galaxy_maglist_blue.Add, blob_galaxies_binned_blue
+  ENDFOR      ; Now we have lists for each catalog containing arrays of the IDs of every galaxy in each mag bin, one array per bin
   ; set up empty arrays containing the number of galaxies in each mag bin and corresponding Poisson errors
   blob_ngal_binned = dblarr(nbins)
   blob_ngalerr_binned = dblarr(nbins) 
+  blob_ngal_binned_mid = dblarr(nbins)
+  blob_ngalerr_binned_mid = dblarr(nbins) 
+  blob_ngal_binned_blue = dblarr(nbins)
+  blob_ngalerr_binned_blue = dblarr(nbins) 
   ; fill in the empty arrays, ensuring that bins with 0 galaxies have error bars of 0 as well
   FOR i=0, nbins-1. DO BEGIN
     bin = galaxy_maglist[i]
+    bin_mid = galaxy_maglist_mid[i]
+    bin_blue = galaxy_maglist_blue[i]
     IF (bin[0] EQ -1) THEN ngal = 0. ELSE ngal = n_elements(bin) 
+    IF (bin_mid[0] EQ -1) THEN ngal_mid = 0. ELSE ngal_mid = n_elements(bin_mid) 
+    IF (bin_blue[0] EQ -1) THEN ngal_blue = 0. ELSE ngal_blue = n_elements(bin_blue) 
     blob_ngal_binned[i] = ngal 
     blob_ngalerr_binned[i] = Poisson_error(ngal) 
+    blob_ngal_binned_mid[i] = ngal_mid 
+    blob_ngalerr_binned_mid[i] = Poisson_error(ngal_mid) 
+    blob_ngal_binned_blue[i] = ngal_blue 
+    blob_ngalerr_binned_blue[i] = Poisson_error(ngal_blue) 
   ENDFOR 
   print, total(blob_ngal_binned), " total galaxies"   ; just a test to make sure it's working - this should match the previous no-bin number 
   ; Finally, compute density and errors: 
   densities = double(blob_ngal_binned)/(!dPI*ap_radius^2.) 
   density_errors = double(blob_ngalerr_binned)/(!dPI*ap_radius^2.)
+  densities_mid = double(blob_ngal_binned_mid)/(!dPI*ap_radius^2.) 
+  density_errors_mid = double(blob_ngalerr_binned_mid)/(!dPI*ap_radius^2.)
+  densities_blue = double(blob_ngal_binned_blue)/(!dPI*ap_radius^2.) 
+  density_errors_blue = double(blob_ngalerr_binned_blue)/(!dPI*ap_radius^2.)
 
   ; now do the same thing with the color cuts
   galaxy_maglist_cuts = list()
+  galaxy_maglist_cuts_mid = list()
+  galaxy_maglist_cuts_blue = list()
   FOR mag=brightestmag, dimmestmag, binsize DO BEGIN
     blob_galaxies_binned_cuts=get_galaxies_binned(blobra[blob], blobdec[blob], ap_radius, dataredcut, mag, mag+binsize)
     galaxy_maglist_cuts.Add, blob_galaxies_binned_cuts
-  ENDFOR      ; Now we have a list containing arrays of the IDs of every galaxy in each mag bin, one array per bin
+    blob_galaxies_binned_cuts_mid=get_galaxies_binned(blobra[blob], blobdec[blob], ap_radius, datamidcut, mag, mag+binsize)
+    galaxy_maglist_cuts_mid.Add, blob_galaxies_binned_cuts_mid
+    blob_galaxies_binned_cuts_blue=get_galaxies_binned(blobra[blob], blobdec[blob], ap_radius, databluecut, mag, mag+binsize)
+    galaxy_maglist_cuts_blue.Add, blob_galaxies_binned_cuts_blue
+  ENDFOR      ; Now we have lists containing arrays of the IDs of every galaxy in each mag bin, one array per bin
   ; set up empty arrays containing the number of galaxies in each mag bin and corresponding Poisson errors
   blob_ngal_binned_cuts = dblarr(nbins)
   blob_ngalerr_binned_cuts = dblarr(nbins) 
+  blob_ngal_binned_cuts_mid = dblarr(nbins)
+  blob_ngalerr_binned_cuts_mid = dblarr(nbins) 
+  blob_ngal_binned_cuts_blue = dblarr(nbins)
+  blob_ngalerr_binned_cuts_blue = dblarr(nbins) 
   ; fill in the empty arrays, ensuring that bins with 0 galaxies have error bars of 0 as well
   FOR i=0, nbins-1. DO BEGIN
+    ; red band 
     bin = galaxy_maglist_cuts[i]
     IF (bin[0] EQ -1) THEN ngal = 0. ELSE ngal = n_elements(bin) 
     blob_ngal_binned_cuts[i] = ngal 
     blob_ngalerr_binned_cuts[i] = Poisson_error(ngal) 
+    ; middle band 
+    bin_mid = galaxy_maglist_cuts_mid[i]
+    IF (bin_mid[0] EQ -1) THEN ngal_mid = 0. ELSE ngal_mid = n_elements(bin_mid) 
+    blob_ngal_binned_cuts_mid[i] = ngal_mid 
+    blob_ngalerr_binned_cuts_mid[i] = Poisson_error(ngal_mid) 
+    ; blue band 
+    bin_blue = galaxy_maglist_cuts_blue[i]
+    IF (bin_blue[0] EQ -1) THEN ngal_blue = 0. ELSE ngal_blue = n_elements(bin_blue) 
+    blob_ngal_binned_cuts_blue[i] = ngal_blue 
+    blob_ngalerr_binned_cuts_blue[i] = Poisson_error(ngal_blue) 
   ENDFOR 
   print, total(blob_ngal_binned_cuts), " total galaxies with color cut"   ; to show how many galaxies are left after color cuts
   ; Finally, compute density and errors: 
   densities_cuts = double(blob_ngal_binned_cuts)/(!dPI*ap_radius^2.) 
   density_errors_cuts = double(blob_ngalerr_binned_cuts)/(!dPI*ap_radius^2.)
+  densities_cuts_mid = double(blob_ngal_binned_cuts_mid)/(!dPI*ap_radius^2.) 
+  density_errors_cuts_mid = double(blob_ngalerr_binned_cuts_mid)/(!dPI*ap_radius^2.)
+  densities_cuts_blue = double(blob_ngal_binned_cuts_blue)/(!dPI*ap_radius^2.) 
+  density_errors_cuts_blue = double(blob_ngalerr_binned_cuts_blue)/(!dPI*ap_radius^2.)
 
 
 
@@ -301,12 +353,27 @@ FOR blob=0, nblobs-1 DO BEGIN
     ; set up the arrays which will contain all the information about the random apertures placed
     ap_ras = dblarr(nApertures)     ; this will contain RAs of all apertures
     ap_decs = dblarr(nApertures)    ; this will contain declinations of all apertures
+    ; red band 
     ap_ngal_binned = dblarr(nbins,nApertures)   ; this will contain # galaxies in each aperture in each mag bin
     ap_ngalerr_binned = dblarr(nbins,nApertures)   ; same as above but errors on # rather than just #
     ap_ngal_binned_cuts = dblarr(nbins,nApertures)  
     ap_ngalerr_binned_cuts = dblarr(nbins,nApertures)   
     megalist = list()   ; list of lists, each corresponding to one aperture, containing the ID #s of all the galaxies in each mag bin 
     megalist_cuts = list() 
+    ; middle band 
+    ap_ngal_binned_mid = dblarr(nbins,nApertures)   ; this will contain # galaxies in each aperture in each mag bin
+    ap_ngalerr_binned_mid = dblarr(nbins,nApertures)   ; same as above but errors on # rather than just #
+    ap_ngal_binned_cuts_mid = dblarr(nbins,nApertures)  
+    ap_ngalerr_binned_cuts_mid = dblarr(nbins,nApertures)   
+    megalist_mid = list()   ; list of lists, each corresponding to one aperture, containing the ID #s of all the galaxies in each mag bin 
+    megalist_cuts_mid = list() 
+    ; blue band 
+    ap_ngal_binned_blue = dblarr(nbins,nApertures)   ; this will contain # galaxies in each aperture in each mag bin
+    ap_ngalerr_binned_blue = dblarr(nbins,nApertures)   ; same as above but errors on # rather than just #
+    ap_ngal_binned_cuts_blue = dblarr(nbins,nApertures)  
+    ap_ngalerr_binned_cuts_blue = dblarr(nbins,nApertures)   
+    megalist_blue = list()   ; list of lists, each corresponding to one aperture, containing the ID #s of all the galaxies in each mag bin 
+    megalist_cuts_blue = list() 
     ; make an aperture image and blank image into which to insert it 
     dist_ellipse, dim, [2.*ap_radius_pix, 2.*ap_radius_pix], ap_radius_pix, ap_radius_pix, 1.,0.
     blankim = ap_radius_pix+fltarr(npix_x,npix_y)  
@@ -368,29 +435,70 @@ FOR blob=0, nblobs-1 DO BEGIN
       ; get list of galaxy IDs in each mag bin for this aperture
       ap_galaxy_maglist = list()
       ap_galaxy_maglist_cuts = list()
+      ap_galaxy_maglist_mid = list()
+      ap_galaxy_maglist_cuts_mid = list()
+      ap_galaxy_maglist_blue = list()
+      ap_galaxy_maglist_cuts_blue = list()
       FOR mag=brightestmag, dimmestmag, binsize DO BEGIN
+        ; red band
         ap_galaxies_binned=get_galaxies_binned(ap_ra, ap_dec, ap_radius, datared, mag, mag+binsize)
         ap_galaxies_binned_cuts = get_galaxies_binned(ap_ra, ap_dec, ap_radius, dataredcut, mag, mag+binsize)
         ap_galaxy_maglist.Add, ap_galaxies_binned
         ap_galaxy_maglist_cuts.Add, ap_galaxies_binned_cuts
+        ; middle band
+        ap_galaxies_binned_mid=get_galaxies_binned(ap_ra, ap_dec, ap_radius, datamid, mag, mag+binsize)
+        ap_galaxies_binned_cuts_mid = get_galaxies_binned(ap_ra, ap_dec, ap_radius, datamidcut, mag, mag+binsize)
+        ap_galaxy_maglist_mid.Add, ap_galaxies_binned_mid
+        ap_galaxy_maglist_cuts_mid.Add, ap_galaxies_binned_cuts_mid
+        ; blue band
+        ap_galaxies_binned_blue=get_galaxies_binned(ap_ra, ap_dec, ap_radius, datablue, mag, mag+binsize)
+        ap_galaxies_binned_cuts_blue = get_galaxies_binned(ap_ra, ap_dec, ap_radius, databluecut, mag, mag+binsize)
+        ap_galaxy_maglist_blue.Add, ap_galaxies_binned_blue
+        ap_galaxy_maglist_cuts_blue.Add, ap_galaxies_binned_cuts_blue
       ENDFOR 
       ; put the list of ID numbers per mag bin in this aperture into the mega list for all apertures:
       megalist.Add, ap_galaxy_maglist   
       megalist_cuts.Add, ap_galaxy_maglist_cuts
+      megalist_mid.Add, ap_galaxy_maglist_mid   
+      megalist_cuts_mid.Add, ap_galaxy_maglist_cuts_mid
+      megalist_blue.Add, ap_galaxy_maglist_blue   
+      megalist_cuts_blue.Add, ap_galaxy_maglist_cuts_blue
 
       ; get number of galaxies in each bin and error for this aperture 
       FOR i=0, nbins-1. DO BEGIN
+        ; red band 
         bin = ap_galaxy_maglist[i]
         IF (bin[0] EQ -1) THEN ngal = 0. ELSE ngal = n_elements(bin) 
         ap_ngal_binned[i,ap] = ngal 
         ap_ngalerr_binned[i,ap] = Poisson_error(ngal)
+        ; middle band 
+        bin_mid = ap_galaxy_maglist_mid[i]
+        IF (bin_mid[0] EQ -1) THEN ngal_mid = 0. ELSE ngal_mid = n_elements(bin_mid) 
+        ap_ngal_binned_mid[i,ap] = ngal_mid 
+        ap_ngalerr_binned_mid[i,ap] = Poisson_error(ngal_mid)
+        ; blue band 
+        bin_blue = ap_galaxy_maglist_blue[i]
+        IF (bin_blue[0] EQ -1) THEN ngal_blue = 0. ELSE ngal_blue = n_elements(bin_blue) 
+        ap_ngal_binned_blue[i,ap] = ngal_blue 
+        ap_ngalerr_binned_blue[i,ap] = Poisson_error(ngal_blue)
       ENDFOR 
       ; same as before but with color cuts 
       FOR i=0, nbins-1. DO BEGIN
+        ; red band 
         bin = ap_galaxy_maglist_cuts[i]
         IF (bin[0] EQ -1) THEN ngal = 0. ELSE ngal = n_elements(bin) 
         ap_ngal_binned_cuts[i,ap] = ngal 
         ap_ngalerr_binned_cuts[i,ap] = Poisson_error(ngal)
+        ; middle band 
+        bin_mid = ap_galaxy_maglist_cuts_mid[i]
+        IF (bin_mid[0] EQ -1) THEN ngal_mid = 0. ELSE ngal_mid = n_elements(bin_mid) 
+        ap_ngal_binned_cuts_mid[i,ap] = ngal_mid 
+        ap_ngalerr_binned_cuts_mid[i,ap] = Poisson_error(ngal_mid)
+        ; blue band 
+        bin_blue = ap_galaxy_maglist_cuts_blue[i]
+        IF (bin_blue[0] EQ -1) THEN ngal_blue = 0. ELSE ngal_blue = n_elements(bin_blue) 
+        ap_ngal_binned_cuts_blue[i,ap] = ngal_blue 
+        ap_ngalerr_binned_cuts_blue[i,ap] = Poisson_error(ngal_blue)
       ENDFOR 
 
     ENDFOR    ; all the random apertures 
@@ -399,36 +507,66 @@ FOR blob=0, nblobs-1 DO BEGIN
 
 
     ; calculate densities in each bin in each aperture and errors: 
+       ; red band 
     ap_densities = double(ap_ngal_binned)/(!dPI*ap_radius^2.*ap_area_weight)           ; array of the densities in each aperture in each mag bin
     ap_density_errors = double(ap_ngalerr_binned)/(!dPI*ap_radius^2.*ap_area_weight)   ; same as above except errors 
+       ; middle band 
+    ap_densities_mid = double(ap_ngal_binned_mid)/(!dPI*ap_radius^2.*ap_area_weight)           ; array of the densities in each aperture in each mag bin
+    ap_density_errors_mid = double(ap_ngalerr_binned_mid)/(!dPI*ap_radius^2.*ap_area_weight)   ; same as above except errors 
+       ; blue band 
+    ap_densities_blue = double(ap_ngal_binned_blue)/(!dPI*ap_radius^2.*ap_area_weight)           ; array of the densities in each aperture in each mag bin
+    ap_density_errors_blue = double(ap_ngalerr_binned_blue)/(!dPI*ap_radius^2.*ap_area_weight)   ; same as above except errors 
     ; average the densities of all the apertures in each bin to get average field density in each bin: 
+       ; red band 
     field_densities = total(ap_densities,2)/double(nApertures)             ; field density in each bin 
     field_density_errors = total(ap_density_errors,2)/double(nApertures)   ; errors in field density in each bin 
+       ; middle band 
+    field_densities_mid = total(ap_densities_mid,2)/double(nApertures)             ; field density in each bin 
+    field_density_errors_mid = total(ap_density_errors_mid,2)/double(nApertures)   ; errors in field density in each bin 
+       ; blue band 
+    field_densities_blue = total(ap_densities_blue,2)/double(nApertures)             ; field density in each bin 
+    field_density_errors_blue = total(ap_density_errors_blue,2)/double(nApertures)   ; errors in field density in each bin 
 
 
     ; calculate densities in each bin in each aperture and errors WITH COLOR CUTS: 
+       ; red band 
     ap_densities_cuts = double(ap_ngal_binned_cuts)/(!dPI*ap_radius^2.*ap_area_weight)           ; array of the densities in each aperture in each mag bin
     ap_density_errors_cuts = double(ap_ngalerr_binned_cuts)/(!dPI*ap_radius^2.*ap_area_weight)   ; same as above except errors 
-    ; average the densities of all the apertures in each bin to get average field density in each bin: 
+       ; middle band 
+    ap_densities_cuts_mid = double(ap_ngal_binned_cuts_mid)/(!dPI*ap_radius^2.*ap_area_weight)           ; array of the densities in each aperture in each mag bin
+    ap_density_errors_cuts_mid = double(ap_ngalerr_binned_cuts_mid)/(!dPI*ap_radius^2.*ap_area_weight)   ; same as above except errors 
+       ; blue band 
+    ap_densities_cuts_blue = double(ap_ngal_binned_cuts_blue)/(!dPI*ap_radius^2.*ap_area_weight)           ; array of the densities in each aperture in each mag bin
+    ap_density_errors_cuts_blue = double(ap_ngalerr_binned_cuts_blue)/(!dPI*ap_radius^2.*ap_area_weight)   ; same as above except errors 
+    ; average the densities of all the apertures in each bin to get average field density in each bin with color cuts: 
+       ; red band 
     field_densities_cuts = total(ap_densities_cuts,2)/double(nApertures)             ; field density in each bin 
     field_density_errors_cuts = total(ap_density_errors_cuts,2)/double(nApertures)   ; errors in field density in each bin 
+       ; middle band 
+    field_densities_cuts_mid = total(ap_densities_cuts_mid,2)/double(nApertures)             ; field density in each bin 
+    field_density_errors_cuts_mid = total(ap_density_errors_cuts_mid,2)/double(nApertures)   ; errors in field density in each bin 
+       ; blue band 
+    field_densities_cuts_blue = total(ap_densities_cuts_blue,2)/double(nApertures)             ; field density in each bin 
+    field_density_errors_cuts_blue = total(ap_density_errors_cuts_blue,2)/double(nApertures)   ; errors in field density in each bin 
 
 
 
     ; MAIN OVERDENSITY PLOT:
-
+    
+    ; RED BAND 
     ; set up vertices of polygon for polyfill
+      ; x is for all bands 
+    xpoints = dblarr(2*nbins)
+    xpoints[0:nbins-1] = mags
+    FOR i=0, nbins-1 DO BEGIN
+     xpoints[i+nbins] = mags[nbins-1-i]
+    ENDFOR 
+    ; y is specific to each catalog (band) 
     ypoints=dblarr(2*nbins)
     ypoints[0:nbins-1] = field_densities-field_density_errors
     FOR i=0, nbins-1 DO BEGIN
     ypoints[i+nbins] = field_densities[nbins-1-i]+field_density_errors[nbins-1-i]
     ENDFOR
-    xpoints = dblarr(2*nbins)
-    xpoints[0:nbins-1] = mags
-    FOR i=0, nbins-1 DO BEGIN
-     xpoints[i+nbins] = mags[nbins-1-i]
-    ENDFOR
-
     ; make the main plot comparing blob to field with error bars 
     window, 1, retain=2, xsize=1200, ysize=1000
     title=("Galaxy Overdensity in Blob Region for " + blobname[blob] + apsnameplot)
@@ -457,22 +595,94 @@ FOR blob=0, nblobs-1 DO BEGIN
     ENDIF 
     wdelete, 1
 
+    ; MIDDLE BAND 
+    ; set up vertices of polygon for polyfill
+    ypoints=dblarr(2*nbins)
+    ypoints[0:nbins-1] = field_densities_mid-field_density_errors_mid
+    FOR i=0, nbins-1 DO BEGIN
+    ypoints[i+nbins] = field_densities_mid[nbins-1-i]+field_density_errors_mid[nbins-1-i]
+    ENDFOR
+    ; make the main plot comparing blob to field with error bars 
+    window, 1, retain=2, xsize=1200, ysize=1000
+    title=("Galaxy Overdensity in Blob Region for " + blobname[blob] + apsnameplot)
+    plot, mags, densities_mid, xtitle="magnitude (F814W)", ytitle="N!Igal!N per deg!E2!N per 0.5 mag", title=title, xthick=2,ythick=2,background=255, color=0, charsize=2., psym=-8, /ylog, yrange=[1d3,1d6], /ystyle, xrange=[22.5,29.5], /xstyle, charthick=2 
+    polyfill, xpoints, ypoints, color=200, clip=[22.5,1d3,29.5,1d6], /data, noclip=0
+    errplot, mags, densities_mid-density_errors_mid, densities_mid+density_errors_mid, color=0, thick=2
+    oplot, mags, densities_mid, psym=-8, color=0, thick=2     ; have to do this again because polyfill covers it up 
+    oplot, mags, field_densities_mid, color=0, linestyle=2, thick=2
+    LEGEND, ['blob','field'], /right, /top, color=0, textcolor=0, linestyle=[0,2], thick=2., charsize=1.5, box=0, number=0.1, charthick=1.5   
+    axis, color=0, xaxis=0, xrange=[22.5,29.5], /xstyle, /data, charsize=2, charthick=2, xtickformat="(A1)", xthick=2
+    axis, color=0, xaxis=1, xrange=[22.5,29.5], /xstyle, /data, charsize=0, xtickformat="(A1)", xthick=2
+    axis, color=0, yaxis=0, /ylog, yrange=[1d3,1d6], /ystyle,  /ynozero, /data, charsize=2, charthick=2, ytickformat="(A1)", ythick=2
+    axis, color=0, yaxis=1, /ylog, yrange=[1d3,1d6], /ystyle,  /ynozero, /data, charsize=0, ytickformat="(A1)", ythick=2
+    saveplot = ''
+    READ, saveplot, PROMPT='Save overdensity plot? (y/n)'
+    IF (saveplot EQ 'y') THEN BEGIN 
+       namestring = string(blobname[blob]) + '_overdensity' + apsnamesave + '_mid.png'
+       write_png, namestring, tvrd(/true) 
+    ENDIF ELSE IF ((saveplot NE 'y') AND (saveplot NE 'n')) THEN BEGIN 
+      WHILE ((saveplot NE 'y') AND (saveplot NE 'n')) DO BEGIN 
+        print, 'Invalid response. Choose y or n.' 
+        READ, saveplot, PROMPT='Save overdensity plot? (y/n)'
+      ENDWHILE
+    ENDIF ELSE IF (saveplot EQ 'n') THEN BEGIN
+      print, 'Overdensity plot not saved.'
+    ENDIF 
+    wdelete, 1
+
+    ; BLUE BAND 
+    ; set up vertices of polygon for polyfill
+    ypoints=dblarr(2*nbins)
+    ypoints[0:nbins-1] = field_densities_blue-field_density_errors_blue
+    FOR i=0, nbins-1 DO BEGIN
+    ypoints[i+nbins] = field_densities_blue[nbins-1-i]+field_density_errors_blue[nbins-1-i]
+    ENDFOR
+    ; make the main plot comparing blob to field with error bars 
+    window, 1, retain=2, xsize=1200, ysize=1000
+    title=("Galaxy Overdensity in Blob Region for " + blobname[blob] + apsnameplot)
+    plot, mags, densities_blue, xtitle="magnitude (F475W/F606W)", ytitle="N!Igal!N per deg!E2!N per 0.5 mag", title=title, xthick=2,ythick=2,background=255, color=0, charsize=2., psym=-8, /ylog, yrange=[1d3,1d6], /ystyle, xrange=[22.5,29.5], /xstyle, charthick=2 
+    polyfill, xpoints, ypoints, color=200, clip=[22.5,1d3,29.5,1d6], /data, noclip=0
+    errplot, mags, densities_blue-density_errors_blue, densities_blue+density_errors_blue, color=0, thick=2
+    oplot, mags, densities_blue, psym=-8, color=0, thick=2     ; have to do this again because polyfill covers it up 
+    oplot, mags, field_densities_blue, color=0, linestyle=2, thick=2
+    LEGEND, ['blob','field'], /right, /top, color=0, textcolor=0, linestyle=[0,2], thick=2., charsize=1.5, box=0, number=0.1, charthick=1.5   
+    axis, color=0, xaxis=0, xrange=[22.5,29.5], /xstyle, /data, charsize=2, charthick=2, xtickformat="(A1)", xthick=2
+    axis, color=0, xaxis=1, xrange=[22.5,29.5], /xstyle, /data, charsize=0, xtickformat="(A1)", xthick=2
+    axis, color=0, yaxis=0, /ylog, yrange=[1d3,1d6], /ystyle,  /ynozero, /data, charsize=2, charthick=2, ytickformat="(A1)", ythick=2
+    axis, color=0, yaxis=1, /ylog, yrange=[1d3,1d6], /ystyle,  /ynozero, /data, charsize=0, ytickformat="(A1)", ythick=2
+    saveplot = ''
+    READ, saveplot, PROMPT='Save overdensity plot? (y/n)'
+    IF (saveplot EQ 'y') THEN BEGIN 
+       namestring = string(blobname[blob]) + '_overdensity' + apsnamesave + '_blue.png'
+       write_png, namestring, tvrd(/true) 
+    ENDIF ELSE IF ((saveplot NE 'y') AND (saveplot NE 'n')) THEN BEGIN 
+      WHILE ((saveplot NE 'y') AND (saveplot NE 'n')) DO BEGIN 
+        print, 'Invalid response. Choose y or n.' 
+        READ, saveplot, PROMPT='Save overdensity plot? (y/n)'
+      ENDWHILE
+    ENDIF ELSE IF (saveplot EQ 'n') THEN BEGIN
+      print, 'Overdensity plot not saved.'
+    ENDIF 
+    wdelete, 1
+
 
 
  ; MAIN OVERDENSITY PLOT WITH COLOR CUTS:
 
+    ; RED BAND 
     ; set up vertices of polygon for polyfill
-    ypoints=dblarr(2*nbins)
-    ypoints[0:nbins-1] = field_densities_cuts-field_density_errors_cuts
-    FOR i=0, nbins-1 DO BEGIN
-    ypoints[i+nbins] = field_densities_cuts[nbins-1-i]+field_density_errors_cuts[nbins-1-i]
-    ENDFOR
+     ; x is for all bands 
     xpoints = dblarr(2*nbins)
     xpoints[0:nbins-1] = mags
     FOR i=0, nbins-1 DO BEGIN
      xpoints[i+nbins] = mags[nbins-1-i]
     ENDFOR
-
+     ; y is specific for each catalog (band) 
+    ypoints=dblarr(2*nbins)
+    ypoints[0:nbins-1] = field_densities_cuts-field_density_errors_cuts
+    FOR i=0, nbins-1 DO BEGIN
+    ypoints[i+nbins] = field_densities_cuts[nbins-1-i]+field_density_errors_cuts[nbins-1-i]
+    ENDFOR
     ; make the main plot comparing blob to field with error bars 
     window, 2, retain=2, xsize=1200, ysize=1000
     title=("Galaxy Overdensity in Blob Region for " + blobname[blob] + apsnameplot) + ' (with color cuts)'
@@ -490,6 +700,76 @@ FOR blob=0, nblobs-1 DO BEGIN
     READ, saveplot, PROMPT='Save overdensity plot? (y/n)'
     IF (saveplot EQ 'y') THEN BEGIN 
        namestring = string(blobname[blob]) + '_overdensity' + apsnamesave + '_withcuts.png'
+       write_png, namestring, tvrd(/true) 
+    ENDIF ELSE IF ((saveplot NE 'y') AND (saveplot NE 'n')) THEN BEGIN 
+      WHILE ((saveplot NE 'y') AND (saveplot NE 'n')) DO BEGIN 
+        print, 'Invalid response. Choose y or n.' 
+        READ, saveplot, PROMPT='Save overdensity plot? (y/n)'
+      ENDWHILE
+    ENDIF ELSE IF (saveplot EQ 'n') THEN BEGIN
+      print, 'Overdensity plot not saved.'
+    ENDIF 
+    wdelete, 2 
+
+    ; MIDDLE BAND 
+    ; set up vertices of polygon for polyfill
+    ypoints=dblarr(2*nbins)
+    ypoints[0:nbins-1] = field_densities_cuts_mid-field_density_errors_cuts_mid
+    FOR i=0, nbins-1 DO BEGIN
+    ypoints[i+nbins] = field_densities_cuts_mid[nbins-1-i]+field_density_errors_cuts_mid[nbins-1-i]
+    ENDFOR
+    ; make the main plot comparing blob to field with error bars 
+    window, 2, retain=2, xsize=1200, ysize=1000
+    title=("Galaxy Overdensity in Blob Region for " + blobname[blob] + apsnameplot) + ' (with color cuts)'
+    plot, mags, densities_cuts_mid, xtitle="magnitude (F814W)", ytitle="N!Igal!N per deg!E2!N per 0.5 mag", title=title,xthick=2,ythick=2,background=255, color=0, charsize=2., psym=-8, /ylog, yrange=[1d3,1d6], /ystyle, xrange=[22.5,29.5], /xstyle, charthick=2 
+    polyfill, xpoints, ypoints, color=200, clip=[22.5,1d3,29.5,1d6], /data, noclip=0
+    errplot, mags, densities_cuts_mid-density_errors_cuts_mid, densities_cuts_mid+density_errors_cuts_mid, color=0, thick=2
+    oplot, mags, densities_cuts_mid, psym=-8, color=0, thick=2     ; have to do this again because polyfill covers it up 
+    oplot, mags, field_densities_cuts_mid, color=0, linestyle=2, thick=2
+    LEGEND, ['blob','field'], /right, /top, color=0, textcolor=0, linestyle=[0,2], thick=2., charsize=1.5, box=0, number=0.1, charthick=1.5   
+    axis, color=0, xaxis=0, xrange=[22.5,29.5], /xstyle, /data, charsize=2, charthick=2, xtickformat="(A1)", xthick=2
+    axis, color=0, xaxis=1, xrange=[22.5,29.5], /xstyle, /data, charsize=0, xtickformat="(A1)", xthick=2
+    axis, color=0, yaxis=0, /ylog, yrange=[1d3,1d6], /ystyle,  /ynozero, /data, charsize=2, charthick=2, ytickformat="(A1)", ythick=2
+    axis, color=0, yaxis=1, /ylog, yrange=[1d3,1d6], /ystyle,  /ynozero, /data, charsize=0, ytickformat="(A1)", ythick=2
+    saveplot = ''
+    READ, saveplot, PROMPT='Save overdensity plot? (y/n)'
+    IF (saveplot EQ 'y') THEN BEGIN 
+       namestring = string(blobname[blob]) + '_overdensity' + apsnamesave + '_withcuts_mid.png'
+       write_png, namestring, tvrd(/true) 
+    ENDIF ELSE IF ((saveplot NE 'y') AND (saveplot NE 'n')) THEN BEGIN 
+      WHILE ((saveplot NE 'y') AND (saveplot NE 'n')) DO BEGIN 
+        print, 'Invalid response. Choose y or n.' 
+        READ, saveplot, PROMPT='Save overdensity plot? (y/n)'
+      ENDWHILE
+    ENDIF ELSE IF (saveplot EQ 'n') THEN BEGIN
+      print, 'Overdensity plot not saved.'
+    ENDIF 
+    wdelete, 2
+
+    ; BLUE BAND 
+    ; set up vertices of polygon for polyfill
+    ypoints=dblarr(2*nbins)
+    ypoints[0:nbins-1] = field_densities_cuts_blue-field_density_errors_cuts_blue
+    FOR i=0, nbins-1 DO BEGIN
+    ypoints[i+nbins] = field_densities_cuts_blue[nbins-1-i]+field_density_errors_cuts_blue[nbins-1-i]
+    ENDFOR
+    ; make the main plot comparing blob to field with error bars 
+    window, 2, retain=2, xsize=1200, ysize=1000
+    title=("Galaxy Overdensity in Blob Region for " + blobname[blob] + apsnameplot) + ' (with color cuts)'
+    plot, mags, densities_cuts_blue, xtitle="magnitude (F475W/F606W)", ytitle="N!Igal!N per deg!E2!N per 0.5 mag", title=title,xthick=2,ythick=2,background=255, color=0, charsize=2., psym=-8, /ylog, yrange=[1d3,1d6], /ystyle, xrange=[22.5,29.5], /xstyle, charthick=2 
+    polyfill, xpoints, ypoints, color=200, clip=[22.5,1d3,29.5,1d6], /data, noclip=0
+    errplot, mags, densities_cuts_blue-density_errors_cuts_blue, densities_cuts_blue+density_errors_cuts_blue, color=0, thick=2
+    oplot, mags, densities_cuts_blue, psym=-8, color=0, thick=2     ; have to do this again because polyfill covers it up 
+    oplot, mags, field_densities_cuts_blue, color=0, linestyle=2, thick=2
+    LEGEND, ['blob','field'], /right, /top, color=0, textcolor=0, linestyle=[0,2], thick=2., charsize=1.5, box=0, number=0.1, charthick=1.5   
+    axis, color=0, xaxis=0, xrange=[22.5,29.5], /xstyle, /data, charsize=2, charthick=2, xtickformat="(A1)", xthick=2
+    axis, color=0, xaxis=1, xrange=[22.5,29.5], /xstyle, /data, charsize=0, xtickformat="(A1)", xthick=2
+    axis, color=0, yaxis=0, /ylog, yrange=[1d3,1d6], /ystyle,  /ynozero, /data, charsize=2, charthick=2, ytickformat="(A1)", ythick=2
+    axis, color=0, yaxis=1, /ylog, yrange=[1d3,1d6], /ystyle,  /ynozero, /data, charsize=0, ytickformat="(A1)", ythick=2
+    saveplot = ''
+    READ, saveplot, PROMPT='Save overdensity plot? (y/n)'
+    IF (saveplot EQ 'y') THEN BEGIN 
+       namestring = string(blobname[blob]) + '_overdensity' + apsnamesave + '_withcuts_blue.png'
        write_png, namestring, tvrd(/true) 
     ENDIF ELSE IF ((saveplot NE 'y') AND (saveplot NE 'n')) THEN BEGIN 
       WHILE ((saveplot NE 'y') AND (saveplot NE 'n')) DO BEGIN 
@@ -584,7 +864,7 @@ FOR blob=0, nblobs-1 DO BEGIN
       n_in_aps[*] = ap_numbers_corrected[i,*]
       checker = WHERE(n_in_aps NE 0, /null)
       IF (checker NE !null) THEN BEGIN
-        window, i, retain=2, xsize=1200, ysize=1000
+        window, 0, retain=2, xsize=1200, ysize=1000
         title = 'Galaxy Number Density in Apertures for Galaxies between Magnitudes ' + string(mags[i], format='(F4.1)') + ' and ' + string(mags[i]+binsize, format='(F4.1)') + ' for ' + blobname[blob] + ', no cuts'
         plothist, n_in_aps, background=255, color=0, xtitle='n galaxies in aperture', ytitle='number of apertures', title=title, axiscolor=0, bin=1, xrange=[0,50], /xstyle
         blobgaltext = 'blob: ' + string(fix(blob_ngal_binned[i])) + ' galaxies in this bin'
@@ -595,14 +875,14 @@ FOR blob=0, nblobs-1 DO BEGIN
          namestring = string(blobname[blob]) + '_' + string(mags[i], format='(F4.1)') + '_aphist.png'
          write_png, namestring, tvrd(/true) 
         ENDIF 
-        wdelete, i
+        wdelete, 0
       ENDIF ELSE print, "no apertures contain any galaxies with magnitudes between ", string(mags[i], format='(F4.1)'), " and ", string(mags[i]+binsize, format='(F4.1)'), ' without cuts'
       ; now do the same for the cuts 
       n_in_aps_cuts = fltarr(nApertures)
       n_in_aps_cuts[*] = ap_numbers_corrected_cuts[i,*]
       checker = WHERE(n_in_aps_cuts NE 0, /null)
       IF (checker NE !null) THEN BEGIN
-        window, i, retain=2, xsize=1200, ysize=1000
+        window, 0, retain=2, xsize=1200, ysize=1000
         title = 'Galaxy Number Density in Apertures for Galaxies between Magnitudes ' + string(mags[i], format='(F4.1)') + ' and ' + string(mags[i]+binsize, format='(F4.1)') + ' for ' + blobname[blob] + ', with cuts'
         plothist, n_in_aps_cuts, background=255, color=0, xtitle='n galaxies in aperture', ytitle='number of apertures', title=title, axiscolor=0, bin=1, xrange=[0,50], /xstyle
         blobgaltext = 'blob: ' + string(fix(blob_ngal_binned_cuts[i])) + ' galaxies in this bin'
@@ -613,7 +893,7 @@ FOR blob=0, nblobs-1 DO BEGIN
          namestring = string(blobname[blob]) + '_' + string(mags[i], format='(F4.1)') + '_aphist_cuts.png'
          write_png, namestring, tvrd(/true) 
         ENDIF 
-        wdelete, i
+        wdelete, 0
       ENDIF ELSE print, "no apertures contain any galaxies with magnitudes between ", string(mags[i], format='(F4.1)'), " and ", string(mags[i]+binsize, format='(F4.1)'), ' with cuts'
     ENDFOR
     ;ap_ngal_binned = dblarr(nbins,nApertures)   ; contains # galaxies in each aperture in each mag bin
