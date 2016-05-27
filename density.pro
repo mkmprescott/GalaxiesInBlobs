@@ -547,6 +547,8 @@ FOR blob=0, nblobs-1 DO BEGIN
     wdelete, 3
 
 
+
+   ; ADD THIS STUFF TO THE HEADER!!!
    ; How likely is it to find overdensities in this field anyway? 
     ap_numbers_corrected = ap_densities*!dPI*ap_radius^2.
     ap_numbers_corrected_cuts = ap_densities_cuts*!dPI*ap_radius^2.
@@ -576,8 +578,7 @@ FOR blob=0, nblobs-1 DO BEGIN
       write_png, namestring, tvrd(/true) 
     ENDIF 
     wdelete, 5
-
-
+    ; now look within each individual magnitude bin 
     FOR i=0, nbins-1 DO BEGIN
       n_in_aps = fltarr(nApertures)
       n_in_aps[*] = ap_numbers_corrected[i,*]
