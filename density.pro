@@ -109,12 +109,13 @@ PRO density
       FORWARD_FUNCTION titlemaker 
 
    ; USER-DEFINED VARIABLES: 
-      pixelscale = 0.06                              ; arceseconds per pixel for our images
-      ap_radius_arcsec = [10.,12.] ; aperture radius in arcsec
-      binsize=0.5             ; size of magnitude bins 
-      brightestmag = 22.      ; smallest (brightest) magnitude of galaxies we can reasonably see in our images 
-      dimmestmag = 30.        ; biggest (faintest) magnitude of galaxies we can reasonably see in our images 
+      pixelscale = 0.06               ; arceseconds per pixel for our images (may eventually become part of blobs.csv) 
+      ap_radius_arcsec = [10.,12.]    ; aperture radius in arcsec
+      binsize=0.5                     ; size of magnitude bins 
+      brightestmag = 22.              ; smallest (brightest) magnitude of galaxies we can reasonably see in our images 
+      dimmestmag = 30.                ; biggest (faintest) magnitude of galaxies we can reasonably see in our images 
       nApertures = 10.                ; number of random apertures to use in field density calculation 
+      saveanyplots = 'y'              ; string indicating that user should be asked whether or not to save plots 
 
    ; read in the file containing all blob information
       blobs = read_csv('blobs.csv', n_table_header=1)
@@ -170,16 +171,7 @@ PRO density
       radiusresults_red_cuts = dblarr(n_radii, nbins, 2.)
       radiusresults_mid_cuts = dblarr(n_radii, nbins, 2.)
       radiusresults_blue_cuts = dblarr(n_radii, nbins, 2.) 
-   
-   ; determine ahead of time whether or not to bother saving any files
-   saveanyplots = ''
-   READ, saveanyplots, PROMPT='Save any color-color plots, overdensity plots, statistical luminosity functions, or histograms? (y/n)'
-   IF ((saveanyplots NE 'y') AND (saveanyplots NE 'n')) THEN BEGIN 
-     WHILE ((saveanyplots NE 'y') AND (saveanyplots NE 'n')) DO BEGIN 
-       print, 'Invalid response. Choose y or n.' 
-       READ, saveanyplots, PROMPT='Save any color-color plots, overdensity plots, statistical luminosity functions, or histograms? (y/n)'
-     ENDWHILE
-   ENDIF
+
 
    ; now run analysis of density for different aperture radii 
    FOR r=0, n_radii-1. DO BEGIN
