@@ -30,7 +30,7 @@
 ;|-|   nApertures - a number of random apertures to be placed within the field to determine the average field density     | | 
 ;| |                                                                                                                      |-|
 ;|-| OUTPUT:                                                                                                              | |
-;| |   First, the SExtractir catalogs are read in using rsex (see online documentation) and bad pixel mask                |-|
+;| |   First, the SExtractor catalogs are read in using rsex (see online documentation) and bad pixel mask                |-|
 ;|-|       is read in using mrdfits.                                                                                      | |
 ;| |   After this initial reading-in, the raw number of galaxies within an aperture of the specified radius placed        |-|
 ;|-|       at the blob coordinates is determined. A region file (for DS9) is created marking each blob galaxy. The        | |
@@ -97,995 +97,1086 @@
 ;-----------------------------------------------------------------------------------------------------------------------------
 PRO density
 
-; INITIAL SETUP 
+ ; INITIAL SETUP 
 
-; notify IDL of all functions used in this procedure
-FORWARD_FUNCTION rsex
-FORWARD_FUNCTION get_galaxies
-FORWARD_FUNCTION get_galaxies_binned
-FORWARD_FUNCTION get_galaxies_noblob
-FORWARD_FUNCTION Poisson_error
-FORWARD_FUNCTION colorsort
+   ; notify IDL of all functions used in this procedure
+      FORWARD_FUNCTION rsex
+      FORWARD_FUNCTION get_galaxies
+      FORWARD_FUNCTION get_galaxies_binned
+      FORWARD_FUNCTION get_galaxies_noblob
+      FORWARD_FUNCTION Poisson_error
+      FORWARD_FUNCTION colorsort
+      FORWARD_FUNCTION titlemaker 
 
-; read in the file containing all blob information
-blobs = read_csv('blobs.csv', n_table_header=1)
-; assign names to each field of the "blobs" structure
-blobname = blobs.FIELD01
-blobra = blobs.FIELD02
-blobdec = blobs.FIELD03
-blueband = '/boomerang-data/alhall/LABoverdensity/GalaxiesInBlobs/catalogs/'+blobs.FIELD04
-midband = '/boomerang-data/alhall/LABoverdensity/GalaxiesInBlobs/catalogs/'+blobs.FIELD05
-redband = '/boomerang-data/alhall/LABoverdensity/GalaxiesInBlobs/catalogs/'+blobs.FIELD06
-stack = '/boomerang-data/alhall/LABoverdensity/GalaxiesInBlobs/stacks/'+blobs.FIELD07
-mask = '/boomerang-data/alhall/LABoverdensity/GalaxiesInBlobs/stacks/'+blobs.FIELD08 
-z = blobs.FIELD09                 ; redshift
-m = blobs.FIELD10                 ; slope of color-cut line 
-b = blobs.FIELD11                 ; y-intercept of color-cut line 
-cap = blobs.FIELD12               ; mag above which all colors are consistent with redshift
-nblobs = n_elements(blobname)     ; number of blobs in the blobs.csv file 
-; define the radius of the aperture used to calculate density 
-ap_radius_arcsec = [3.,5.,10.,12.,15.,20.,25.] ; aperture radius in arcsec 
-ap_radius = ap_radius_arcsec/3600.             ; aperture radius in decimal degrees
-pixelscale = 0.06                              ; arceseconds per pixel for our images
-ap_radius_pix = ap_radius_arcsec / pixelscale  ; aperture radius in pixels  
-n_radii = n_elements(ap_radius)                ; number of aperture sizes being tested
-n_radii_indices = n_elements(ap_radius) - 1.   ; last index number in ap_radius array
-; mag binning stuff:
-binsize=0.5             ; size of magnitude bins 
-brightestmag = 22.      ; smallest (brightest) magnitude of galaxies we can reasonably see in our images 
-dimmestmag = 30.        ; biggest (faintest) magnitude of galaxies we can reasonably see in our images 
-nbins = (dimmestmag - brightestmag + binsize)/binsize     ; the number of magnitude bins as determined from our range and binsize 
-mags = brightestmag + binsize*findgen(nbins)              ; an array of every magnitude being used 
-magrange=[brightestmag,dimmestmag]                        ; a two-element array containing only the endpoints of our magnitude range 
-; for plots: make the psym=8 symbol a filled circle
-plotsym, 0, 1, /fill   
-; random aperture stuff:
-nApertures = 1000.                ; number of random apertures to use in field density calculation 
-apsnameplot = ', 1000 Apertures'  ; for plotting purposes 
-apsnamesave = '_1000aps'          ; for saving images 
+   ; USER-DEFINED VARIABLES: 
+      pixelscale = 0.06                              ; arceseconds per pixel for our images
+      ap_radius_arcsec = [10.,12.] ; aperture radius in arcsec
+      binsize=0.5             ; size of magnitude bins 
+      brightestmag = 22.      ; smallest (brightest) magnitude of galaxies we can reasonably see in our images 
+      dimmestmag = 30.        ; biggest (faintest) magnitude of galaxies we can reasonably see in our images 
+      nApertures = 10.                ; number of random apertures to use in field density calculation 
+
+   ; read in the file containing all blob information
+      blobs = read_csv('blobs.csv', n_table_header=1)
+   ; assign names to each field of the "blobs" structure
+      blobname = blobs.FIELD01
+      blobra = blobs.FIELD02
+      blobdec = blobs.FIELD03
+      blueband = '/boomerang-data/alhall/LABoverdensity/GalaxiesInBlobs/catalogs/'+blobs.FIELD04
+      midband = '/boomerang-data/alhall/LABoverdensity/GalaxiesInBlobs/catalogs/'+blobs.FIELD05
+      redband = '/boomerang-data/alhall/LABoverdensity/GalaxiesInBlobs/catalogs/'+blobs.FIELD06
+      stack = '/boomerang-data/alhall/LABoverdensity/GalaxiesInBlobs/stacks/'+blobs.FIELD07
+      mask = '/boomerang-data/alhall/LABoverdensity/GalaxiesInBlobs/stacks/'+blobs.FIELD08 
+      z = blobs.FIELD09                 ; redshift
+      m = blobs.FIELD10                 ; slope of color-cut line 
+      b = blobs.FIELD11                 ; y-intercept of color-cut line 
+      cap = blobs.FIELD12               ; mag above which all colors are consistent with redshift
+      bluename = blobs.FIELD13          ; name of the bluest filter used to observe the blob region
+      midname = blobs.FIELD14           ; name of the middle filter used to observe the blob region
+      redname = blobs.FIELD15           ; name of the reddest filter used to observe the blob region
+      nblobs = n_elements(blobname)     ; number of blobs in the blobs.csv file 
+
+   ; define other important quantities  
+      ; the radius/radii of the aperture(s) used to calculate density:  
+         ap_radius = ap_radius_arcsec/3600.             ; aperture radius in decimal degrees
+         ap_radius_pix = ap_radius_arcsec / pixelscale  ; aperture radius in pixels  
+         n_radii = n_elements(ap_radius)                ; number of aperture sizes being tested
+      ; mag binning stuff:
+         nbins = (dimmestmag - brightestmag + binsize)/binsize     ; the number of magnitude bins as determined from our range and binsize 
+         mags = brightestmag + binsize*findgen(nbins)              ; an array of every magnitude being used 
+         magrange=[brightestmag,dimmestmag]                        ; a two-element array containing only the endpoints of our magnitude range 
+      ; plotting symbol: make the psym=8 symbol a filled circle for our plots 
+         plotsym, 0, 1, /fill   
 
 
 
+ ; DENSITY ANALYSIS FOR EACH BLOB 
 
-; DENSITY ANALYSIS FOR EACH BLOB 
+ FOR blob=0, nblobs-1 DO BEGIN         
 
-FOR blob=0, nblobs-1 DO BEGIN          
+   ; make structures for each SExtractor catalog (one per each of 3 bands for each blob) 
+      datablue = rsex(blueband[blob])    ; either F475W (PRG1 and PRG3) or F606W (PRG2)
+      datamid = rsex(midband[blob])      ; F814W
+      datared = rsex(redband[blob])      ; F140W
+   ; establish info about the images
+      bpm = mrdfits(mask[blob],0,hdr)    ; this is the mask image for weeding out bad pixels in field 
+      sizeinfo = size(bpm)               ; the dimensions of the mask image in pixels 
+      npix_x = sizeinfo[1]               ; number of pixels in mask in the x direction
+      npix_y = sizeinfo[2]               ; number of pixels in mask in the y direction 
+   ; make arrays of info about aperture radii - will contain overdensity factor & error on overdensity factor at each magnitude
+      radiusresults_red_nocuts = dblarr(n_radii, nbins, 2.)
+      radiusresults_mid_nocuts = dblarr(n_radii, nbins, 2.)
+      radiusresults_blue_nocuts = dblarr(n_radii, nbins, 2.)
+      radiusresults_red_cuts = dblarr(n_radii, nbins, 2.)
+      radiusresults_mid_cuts = dblarr(n_radii, nbins, 2.)
+      radiusresults_blue_cuts = dblarr(n_radii, nbins, 2.) 
+   
+   ; determine ahead of time whether or not to bother saving any files
+   saveanyplots = ''
+   READ, saveanyplots, PROMPT='Save any color-color plots, overdensity plots, statistical luminosity functions, or histograms? (y/n)'
+   IF ((saveanyplots NE 'y') AND (saveanyplots NE 'n')) THEN BEGIN 
+     WHILE ((saveanyplots NE 'y') AND (saveanyplots NE 'n')) DO BEGIN 
+       print, 'Invalid response. Choose y or n.' 
+       READ, saveanyplots, PROMPT='Save any color-color plots, overdensity plots, statistical luminosity functions, or histograms? (y/n)'
+     ENDWHILE
+   ENDIF
 
-  ; make structures for each SExtractor catalog (one per each of 3 bands for each blob) 
-  datablue = rsex(blueband[blob])    ; either F475W (PRG1 and PRG3) or F606W (PRG2)
-  datamid = rsex(midband[blob])      ; F814W
-  datared = rsex(redband[blob])      ; F140W
-  ; establish info about the images
-  bpm = mrdfits(mask[blob],0,hdr)    ; this is the mask image for weeding out bad pixels in field 
-  sizeinfo = size(bpm)               ; the dimensions of the mask image in pixels 
-  npix_x = sizeinfo[1]               ; number of pixels in mask in the x direction
-  npix_y = sizeinfo[2]               ; number of pixels in mask in the y direction 
-  ; make arrays of info about aperture radii - will contain overdensity factor & error on overdensity factor at each magnitude
-  radiusresults_red_nocuts = dblarr(n_radii, nbins, 2.)
-  radiusresults_mid_nocuts = dblarr(n_radii, nbins, 2.)
-  radiusresults_blue_nocuts = dblarr(n_radii, nbins, 2.)
-  radiusresults_red_cuts = dblarr(n_radii, nbins, 2.)
-  radiusresults_mid_cuts = dblarr(n_radii, nbins, 2.)
-  radiusresults_blue_cuts = dblarr(n_radii, nbins, 2.) 
+   ; now run analysis of density for different aperture radii 
+   FOR r=0, n_radii-1. DO BEGIN
 
-  saveanyplots = ''
-  READ, saveanyplots, PROMPT='Save any color-color plots, overdensity plots, statistical luminosity functions, or histograms? (y/n)'
-  IF ((saveanyplots NE 'y') AND (saveanyplots NE 'n')) THEN BEGIN 
-    WHILE ((saveanyplots NE 'y') AND (saveanyplots NE 'n')) DO BEGIN 
-      print, 'Invalid response. Choose y or n.' 
-      READ, saveanyplots, PROMPT='Save any color-color plots, overdensity plots, statistical luminosity functions, or histograms? (y/n)'
-    ENDWHILE
-  ENDIF
+     ; First get raw blob density, ie, number of galaxies inside aperture centered on blob with no mag bins yet
+     blob_galaxies_all=get_galaxies(blobra[blob], blobdec[blob], ap_radius[r], datared)
+     blob_ngalraw = n_elements(blob_galaxies_all)
+     ; now get density in number of galaxies per square arcsecond 
+     blobdensityraw = float(blob_ngalraw) / (!dPI*ap_radius[r]^2.)    
+     print, blobdensityraw, " galaxies per square degree in blob region for "+blobname[blob]  
+     print, blob_ngalraw, " galaxies in the blob region for "+blobname[blob] 
 
- FOR r=0, n_radii_indices DO BEGIN
-  ; First, a test: get raw blob density, ie, number of galaxies inside aperture centered on blob with radius specified above with no mag bins yet
-  blob_galaxies_all=get_galaxies(blobra[blob], blobdec[blob], ap_radius[r], datared)
-  blob_ngalraw = n_elements(blob_galaxies_all)
-  ; now get density in number of galaxies per square arcsecond 
-  blobdensityraw = float(blob_ngalraw) / (!dPI*ap_radius[r]^2.)    
-  print, blobdensityraw, " galaxies per square degree in blob region for "+blobname[blob]  
-  print, blob_ngalraw, " galaxies in the blob region for "+blobname[blob] 
+     ; make new catalogs with color cuts
+     xcolorall = datablue.MAG_ISO - datamid.MAG_ISO
+     ycolorall = datamid.MAG_ISO - datared.MAG_ISO
+     dataredcut = colorsort(datared, xcolorall, ycolorall, m[blob], b[blob], cap[blob]) 
+     datamidcut = colorsort(datamid, xcolorall, ycolorall, m[blob], b[blob], cap[blob]) 
+     databluecut = colorsort(datablue, xcolorall, ycolorall, m[blob], b[blob], cap[blob]) 
+     ; get the number of galaxies in the aperture AFTER color cuts
+     blob_galaxies_all_cuts=get_galaxies(blobra[blob], blobdec[blob], ap_radius[r], dataredcut)
+     blob_galaxies_all_cuts_mid=get_galaxies(blobra[blob], blobdec[blob], ap_radius[r], datamidcut)
+     blob_galaxies_all_cuts_blue=get_galaxies(blobra[blob], blobdec[blob], ap_radius[r], databluecut)
+
+
+; SEPARATE ROUTINE FOR BELOW
   ; make a region file 
-  cat = datared[blob_galaxies_all]
-  filename = string(blobname[blob]) +string(ap_radius_arcsec[r]) + 'arcsec_beforecuts.reg'
-  openw, 1, filename
-  FOR i=0, n_elements(cat)-1 DO BEGIN 
-    printf, 1,'J2000; circle ', cat[i].alpha_j2000, cat[i].delta_j2000, ' 10p '    ;#text={', cat[i].number,'}'  
-  ENDFOR 
-  close, 1
-  loadct, 0
-
-  ; make new catalogs with color cuts
-  xcolorall = datablue.MAG_ISO - datamid.MAG_ISO
-  ycolorall = datamid.MAG_ISO - datared.MAG_ISO
-  dataredcut = colorsort(datared, xcolorall, ycolorall, m[blob], b[blob], cap[blob]) 
-  datamidcut = colorsort(datamid, xcolorall, ycolorall, m[blob], b[blob], cap[blob]) 
-  databluecut = colorsort(datablue, xcolorall, ycolorall, m[blob], b[blob], cap[blob]) 
-
-  ; get the number of galaxies in the aperture AFTER color cuts
-  blob_galaxies_all_cuts=get_galaxies(blobra[blob], blobdec[blob], ap_radius[r], dataredcut)
-  blob_galaxies_all_cuts_mid=get_galaxies(blobra[blob], blobdec[blob], ap_radius[r], datamidcut)
-  blob_galaxies_all_cuts_blue=get_galaxies(blobra[blob], blobdec[blob], ap_radius[r], databluecut)
+;  cat = datared[blob_galaxies_all]
+;  filename = string(blobname[blob]) + '_' + redname[blob] + '_' + ap_radius_strings[r] +'_beforecuts.reg'
+;  openw, 1, filename
+;  FOR i=0, n_elements(cat)-1 DO BEGIN 
+;    printf, 1,'J2000; circle ', cat[i].alpha_j2000, cat[i].delta_j2000, ' 10p '    ;#text={', cat[i].number,'}'  
+;  ENDFOR 
+;  close, 1
+; ALSO SEPARATE ROUTINE FOR THIS
   ; make a region file 
-  cat = dataredcut[blob_galaxies_all_cuts]
-  filename = string(blobname[blob]) +string(ap_radius_arcsec[r]) + 'arcsec_aftercuts.reg'
-  openw, 1, filename
-  FOR i=0, n_elements(cat)-1 DO BEGIN 
-    printf, 1,'J2000; circle ', cat[i].alpha_j2000, cat[i].delta_j2000, ' 10p '   ;#text={', cat[i].number,'}'  
-  ENDFOR 
-  close, 1 
+;  cat = dataredcut[blob_galaxies_all_cuts]
+;  filename = string(blobname[blob]) + '_' + redname[blob] + '_' + ap_radius_strings[r] +'_aftercuts.reg'
+;  openw, 1, filename
+;  FOR i=0, n_elements(cat)-1 DO BEGIN 
+;    printf, 1,'J2000; circle ', cat[i].alpha_j2000, cat[i].delta_j2000, ' 10p '   ;#text={', cat[i].number,'}'  
+;  ENDFOR 
+;  close, 1 
+
+
+; make a routine for this
+     ; color-color plot
+     redmags = datared[blob_galaxies_all].MAG_ISO
+     midmags = datamid[blob_galaxies_all].MAG_ISO
+     bluemags = datablue[blob_galaxies_all].MAG_ISO
+     ; make the colors
+     color_x = bluemags - midmags
+     color_y = midmags - redmags
+     ; set up a plot 
+     !P.MULTI = [0,1,1,0,0] 
+     loadct, 0
+     window, 0, retain=2, xsize=400, ysize=300
+     plot, color_x, color_y, title=(blobname[blob]+" Color-Color Diagram"), xtitle="blue - mid", ytitle="mid - red", background=255, color=0, charsize=1.5, thick=2,charthick=1,psym=8, xrange=[-5,5], /xstyle, yrange=[-5,5], /ystyle 
+     field_galaxies = get_galaxies_noblob(blobra[blob], blobdec[blob], ap_radius[r], datared)
+     field_redmags = datared[field_galaxies].MAG_ISO
+     field_midmags = datamid[field_galaxies].MAG_ISO
+     field_bluemags = datablue[field_galaxies].MAG_ISO
+     field_color_x = field_bluemags - field_midmags
+     field_color_y = field_midmags - field_redmags
+     oplot, field_color_x, field_color_y, color=0, psym=3
+     LEGEND, ['blob galaxy','field galaxy'], /left, /top, color=0, textcolor=0, psym=[8,3], charsize=1, charthick=1, /box, outline_color=0 
+     xvalues = 0.01*findgen(100000) - 500.
+     cut = xvalues*m[blob] + b[blob]
+     cut[WHERE(cut GT cap[blob])] = cap[blob]
+     oplot, xvalues, cut, color=50, linestyle=2, thick=2
+     namestring = titlemaker('colors', blobname[blob], radius=ap_radius_arcsec[r], filetype='.png')
+     plotsave, saveanyplots, namestring
 
 
 
-  ; color-color plot
-  redmags = datared[blob_galaxies_all].MAG_ISO
-  midmags = datamid[blob_galaxies_all].MAG_ISO
-  bluemags = datablue[blob_galaxies_all].MAG_ISO
-  ; make the colors
-  color_x = bluemags - midmags
-  color_y = midmags - redmags
-  ; set up a plot 
-  window, 0, retain=2, xsize=400, ysize=300
-  plot, color_x, color_y, title=(blobname[blob]+" Color-Color Diagram"), xtitle="blue - mid", ytitle="mid - red", background=255, color=0, charsize=1.5, thick=2,charthick=1,psym=8, xrange=[-5,5], /xstyle, yrange=[-5,5], /ystyle 
-  field_galaxies = get_galaxies_noblob(blobra[blob], blobdec[blob], ap_radius[r], datared)
-  field_redmags = datared[field_galaxies].MAG_ISO
-  field_midmags = datamid[field_galaxies].MAG_ISO
-  field_bluemags = datablue[field_galaxies].MAG_ISO
-  field_color_x = field_bluemags - field_midmags
-  field_color_y = field_midmags - field_redmags
-  oplot, field_color_x, field_color_y, color=0, psym=3
-  LEGEND, ['blob galaxy','field galaxy'], /left, /top, color=0, textcolor=0, psym=[8,3], charsize=1, charthick=1, /box, outline_color=0 
-  xvalues = 0.01*findgen(100000) - 500.
-  cut = xvalues*m[blob] + b[blob]
-  cut[WHERE(cut GT cap[blob])] = cap[blob]
-  oplot, xvalues, cut, color=50, linestyle=2, thick=2
-  IF (saveanyplots EQ 'y') THEN BEGIN 
-    saveplot = ''
-    READ, saveplot, PROMPT='Save color-color plot? (y/n)'
-    IF (saveplot EQ 'y') THEN BEGIN 
-      namestring = string(blobname[blob]) + '_color-color_withcut_small.png'
-      write_png, namestring, tvrd(/true)
-    ENDIF ELSE IF ((saveplot NE 'y') AND (saveplot NE 'n')) THEN BEGIN 
-      WHILE ((saveplot NE 'y') AND (saveplot NE 'n')) DO BEGIN 
-        print, 'Invalid response. Choose y or n.' 
-        READ, saveplot, PROMPT='Save color-color plot? (y/n)'
-      ENDWHILE
-    ENDIF ELSE IF (saveplot EQ 'n') THEN BEGIN
-      print, 'Color-color plot not saved.'
-    ENDIF 
-    wdelete, 0
-  ENDIF   ; user wants to save at least some plots 
+; maybe make this its own routine too:
 
-
-
-
-  ; MAG BINNING: 
-
-  galaxy_maglist = list()
-  galaxy_maglist_mid = list()
-  galaxy_maglist_blue = list()
-  FOR mag=brightestmag, dimmestmag, binsize DO BEGIN
-    ; red band 
-    blob_galaxies_binned = get_galaxies_binned(blobra[blob], blobdec[blob], ap_radius[r], datared, mag, mag+binsize)
-    galaxy_maglist.Add, blob_galaxies_binned
-    ; middle band 
-    blob_galaxies_binned_mid = get_galaxies_binned(blobra[blob], blobdec[blob], ap_radius[r], datamid, mag, mag+binsize)
-    galaxy_maglist_mid.Add, blob_galaxies_binned_mid
-    ; blue band 
-    blob_galaxies_binned_blue = get_galaxies_binned(blobra[blob], blobdec[blob], ap_radius[r], datablue, mag, mag+binsize)
-    galaxy_maglist_blue.Add, blob_galaxies_binned_blue
-  ENDFOR      ; Now we have lists for each catalog containing arrays of the IDs of every galaxy in each mag bin, one array per bin
-  ; set up empty arrays containing the number of galaxies in each mag bin and corresponding Poisson errors
-  blob_ngal_binned = dblarr(nbins)
-  blob_ngalerr_binned = dblarr(nbins) 
-  blob_ngal_binned_mid = dblarr(nbins)
-  blob_ngalerr_binned_mid = dblarr(nbins) 
-  blob_ngal_binned_blue = dblarr(nbins)
-  blob_ngalerr_binned_blue = dblarr(nbins) 
-  ; fill in the empty arrays, ensuring that bins with 0 galaxies have error bars of 0 as well
-  FOR i=0, nbins-1. DO BEGIN
-    bin = galaxy_maglist[i]
-    bin_mid = galaxy_maglist_mid[i]
-    bin_blue = galaxy_maglist_blue[i]
-    IF (bin[0] EQ -1) THEN ngal = 0. ELSE ngal = n_elements(bin) 
-    IF (bin_mid[0] EQ -1) THEN ngal_mid = 0. ELSE ngal_mid = n_elements(bin_mid) 
-    IF (bin_blue[0] EQ -1) THEN ngal_blue = 0. ELSE ngal_blue = n_elements(bin_blue) 
-    blob_ngal_binned[i] = ngal 
-    blob_ngalerr_binned[i] = Poisson_error(ngal) 
-    blob_ngal_binned_mid[i] = ngal_mid 
-    blob_ngalerr_binned_mid[i] = Poisson_error(ngal_mid) 
-    blob_ngal_binned_blue[i] = ngal_blue 
-    blob_ngalerr_binned_blue[i] = Poisson_error(ngal_blue) 
-  ENDFOR 
-  print, total(blob_ngal_binned), " total galaxies"   ; just a test to make sure it's working - this should match the previous no-bin number 
-  ; Finally, compute density and errors: 
-  densities = double(blob_ngal_binned)/(!dPI*ap_radius[r]^2.) 
-  density_errors = double(blob_ngalerr_binned)/(!dPI*ap_radius[r]^2.)
-  densities_mid = double(blob_ngal_binned_mid)/(!dPI*ap_radius[r]^2.) 
-  density_errors_mid = double(blob_ngalerr_binned_mid)/(!dPI*ap_radius[r]^2.)
-  densities_blue = double(blob_ngal_binned_blue)/(!dPI*ap_radius[r]^2.) 
-  density_errors_blue = double(blob_ngalerr_binned_blue)/(!dPI*ap_radius[r]^2.)
-
-  ; now do the same thing with the color cuts
-  galaxy_maglist_cuts = list()
-  galaxy_maglist_cuts_mid = list()
-  galaxy_maglist_cuts_blue = list()
-  FOR mag=brightestmag, dimmestmag, binsize DO BEGIN
-    blob_galaxies_binned_cuts=get_galaxies_binned(blobra[blob], blobdec[blob], ap_radius[r], dataredcut, mag, mag+binsize)
-    galaxy_maglist_cuts.Add, blob_galaxies_binned_cuts
-    blob_galaxies_binned_cuts_mid=get_galaxies_binned(blobra[blob], blobdec[blob], ap_radius[r], datamidcut, mag, mag+binsize)
-    galaxy_maglist_cuts_mid.Add, blob_galaxies_binned_cuts_mid
-    blob_galaxies_binned_cuts_blue=get_galaxies_binned(blobra[blob], blobdec[blob], ap_radius[r], databluecut, mag, mag+binsize)
-    galaxy_maglist_cuts_blue.Add, blob_galaxies_binned_cuts_blue
-  ENDFOR      ; Now we have lists containing arrays of the IDs of every galaxy in each mag bin, one array per bin
-  ; set up empty arrays containing the number of galaxies in each mag bin and corresponding Poisson errors
-  blob_ngal_binned_cuts = dblarr(nbins)
-  blob_ngalerr_binned_cuts = dblarr(nbins) 
-  blob_ngal_binned_cuts_mid = dblarr(nbins)
-  blob_ngalerr_binned_cuts_mid = dblarr(nbins) 
-  blob_ngal_binned_cuts_blue = dblarr(nbins)
-  blob_ngalerr_binned_cuts_blue = dblarr(nbins) 
-  ; fill in the empty arrays, ensuring that bins with 0 galaxies have error bars of 0 as well
-  FOR i=0, nbins-1. DO BEGIN
-    ; red band 
-    bin = galaxy_maglist_cuts[i]
-    IF (bin[0] EQ -1) THEN ngal = 0. ELSE ngal = n_elements(bin) 
-    blob_ngal_binned_cuts[i] = ngal 
-    blob_ngalerr_binned_cuts[i] = Poisson_error(ngal) 
-    ; middle band 
-    bin_mid = galaxy_maglist_cuts_mid[i]
-    IF (bin_mid[0] EQ -1) THEN ngal_mid = 0. ELSE ngal_mid = n_elements(bin_mid) 
-    blob_ngal_binned_cuts_mid[i] = ngal_mid 
-    blob_ngalerr_binned_cuts_mid[i] = Poisson_error(ngal_mid) 
-    ; blue band 
-    bin_blue = galaxy_maglist_cuts_blue[i]
-    IF (bin_blue[0] EQ -1) THEN ngal_blue = 0. ELSE ngal_blue = n_elements(bin_blue) 
-    blob_ngal_binned_cuts_blue[i] = ngal_blue 
-    blob_ngalerr_binned_cuts_blue[i] = Poisson_error(ngal_blue) 
-  ENDFOR 
-  print, total(blob_ngal_binned_cuts), " total galaxies with color cut"   ; to show how many galaxies are left after color cuts
-  ; Finally, compute density and errors: 
-  densities_cuts = double(blob_ngal_binned_cuts)/(!dPI*ap_radius[r]^2.) 
-  density_errors_cuts = double(blob_ngalerr_binned_cuts)/(!dPI*ap_radius[r]^2.)
-  densities_cuts_mid = double(blob_ngal_binned_cuts_mid)/(!dPI*ap_radius[r]^2.) 
-  density_errors_cuts_mid = double(blob_ngalerr_binned_cuts_mid)/(!dPI*ap_radius[r]^2.)
-  densities_cuts_blue = double(blob_ngal_binned_cuts_blue)/(!dPI*ap_radius[r]^2.) 
-  density_errors_cuts_blue = double(blob_ngalerr_binned_cuts_blue)/(!dPI*ap_radius[r]^2.)
+     ; MAG BINNING: 
+       ; start with raw data 
+          galaxy_maglist = list()
+          galaxy_maglist_mid = list()
+          galaxy_maglist_blue = list()
+          FOR mag=brightestmag, dimmestmag, binsize DO BEGIN
+            ; red band 
+            blob_galaxies_binned = get_galaxies_binned(blobra[blob], blobdec[blob], ap_radius[r], datared, mag, mag+binsize)
+            galaxy_maglist.Add, blob_galaxies_binned
+            ; middle band 
+            blob_galaxies_binned_mid = get_galaxies_binned(blobra[blob], blobdec[blob], ap_radius[r], datamid, mag, mag+binsize)
+            galaxy_maglist_mid.Add, blob_galaxies_binned_mid
+            ; blue band 
+            blob_galaxies_binned_blue = get_galaxies_binned(blobra[blob], blobdec[blob], ap_radius[r], datablue, mag, mag+binsize)
+            galaxy_maglist_blue.Add, blob_galaxies_binned_blue
+          ENDFOR      ; Now we have lists for each catalog containing arrays of the IDs of every galaxy in each mag bin, one array per bin
+          ; set up empty arrays containing the number of galaxies in each mag bin and corresponding Poisson errors
+             blob_ngal_binned = dblarr(nbins)
+             blob_ngalerr_binned = dblarr(nbins) 
+             blob_ngal_binned_mid = dblarr(nbins)
+             blob_ngalerr_binned_mid = dblarr(nbins) 
+             blob_ngal_binned_blue = dblarr(nbins)
+             blob_ngalerr_binned_blue = dblarr(nbins) 
+          ; fill in the empty arrays, ensuring that bins with 0 galaxies have error bars of 0 as well
+          FOR i=0, nbins-1. DO BEGIN
+            bin = galaxy_maglist[i]
+            bin_mid = galaxy_maglist_mid[i]
+            bin_blue = galaxy_maglist_blue[i]
+            IF (bin[0] EQ -1) THEN ngal = 0. ELSE ngal = n_elements(bin) 
+            IF (bin_mid[0] EQ -1) THEN ngal_mid = 0. ELSE ngal_mid = n_elements(bin_mid) 
+            IF (bin_blue[0] EQ -1) THEN ngal_blue = 0. ELSE ngal_blue = n_elements(bin_blue) 
+            blob_ngal_binned[i] = ngal 
+            blob_ngalerr_binned[i] = Poisson_error(ngal) 
+            blob_ngal_binned_mid[i] = ngal_mid 
+            blob_ngalerr_binned_mid[i] = Poisson_error(ngal_mid) 
+            blob_ngal_binned_blue[i] = ngal_blue 
+            blob_ngalerr_binned_blue[i] = Poisson_error(ngal_blue) 
+          ENDFOR 
+          print, total(blob_ngal_binned), " total galaxies"   ; just a test to make sure it's working - this should match the previous no-bin number 
+          ; Finally, compute density and errors: 
+             densities = double(blob_ngal_binned)/(!dPI*ap_radius[r]^2.) 
+             density_errors = double(blob_ngalerr_binned)/(!dPI*ap_radius[r]^2.)
+             densities_mid = double(blob_ngal_binned_mid)/(!dPI*ap_radius[r]^2.) 
+             density_errors_mid = double(blob_ngalerr_binned_mid)/(!dPI*ap_radius[r]^2.)
+             densities_blue = double(blob_ngal_binned_blue)/(!dPI*ap_radius[r]^2.) 
+             density_errors_blue = double(blob_ngalerr_binned_blue)/(!dPI*ap_radius[r]^2.)
+       ;
+       ; now do the same thing with the color cuts
+          galaxy_maglist_cuts = list()
+          galaxy_maglist_cuts_mid = list()
+          galaxy_maglist_cuts_blue = list()
+          FOR mag=brightestmag, dimmestmag, binsize DO BEGIN
+            blob_galaxies_binned_cuts=get_galaxies_binned(blobra[blob], blobdec[blob], ap_radius[r], dataredcut, mag, mag+binsize)
+            galaxy_maglist_cuts.Add, blob_galaxies_binned_cuts
+            blob_galaxies_binned_cuts_mid=get_galaxies_binned(blobra[blob], blobdec[blob], ap_radius[r], datamidcut, mag, mag+binsize)
+            galaxy_maglist_cuts_mid.Add, blob_galaxies_binned_cuts_mid
+            blob_galaxies_binned_cuts_blue=get_galaxies_binned(blobra[blob], blobdec[blob], ap_radius[r], databluecut, mag, mag+binsize)
+            galaxy_maglist_cuts_blue.Add, blob_galaxies_binned_cuts_blue
+          ENDFOR      ; Now we have lists containing arrays of the IDs of every galaxy in each mag bin, one array per bin
+          ; set up empty arrays containing the number of galaxies in each mag bin and corresponding Poisson errors
+             blob_ngal_binned_cuts = dblarr(nbins)
+             blob_ngalerr_binned_cuts = dblarr(nbins) 
+             blob_ngal_binned_cuts_mid = dblarr(nbins)
+             blob_ngalerr_binned_cuts_mid = dblarr(nbins) 
+             blob_ngal_binned_cuts_blue = dblarr(nbins)
+             blob_ngalerr_binned_cuts_blue = dblarr(nbins) 
+          ; fill in the empty arrays, ensuring that bins with 0 galaxies have error bars of 0 as well
+          FOR i=0, nbins-1. DO BEGIN
+             ; red band 
+                  bin = galaxy_maglist_cuts[i]
+                  IF (bin[0] EQ -1) THEN ngal = 0. ELSE ngal = n_elements(bin) 
+                  blob_ngal_binned_cuts[i] = ngal 
+                  blob_ngalerr_binned_cuts[i] = Poisson_error(ngal) 
+            ; middle band 
+                  bin_mid = galaxy_maglist_cuts_mid[i]
+                  IF (bin_mid[0] EQ -1) THEN ngal_mid = 0. ELSE ngal_mid = n_elements(bin_mid) 
+                  blob_ngal_binned_cuts_mid[i] = ngal_mid 
+                  blob_ngalerr_binned_cuts_mid[i] = Poisson_error(ngal_mid) 
+            ; blue band 
+                  bin_blue = galaxy_maglist_cuts_blue[i]
+                  IF (bin_blue[0] EQ -1) THEN ngal_blue = 0. ELSE ngal_blue = n_elements(bin_blue) 
+                  blob_ngal_binned_cuts_blue[i] = ngal_blue 
+                  blob_ngalerr_binned_cuts_blue[i] = Poisson_error(ngal_blue) 
+          ENDFOR 
+          print, total(blob_ngal_binned_cuts), " total galaxies with color cut"   ; to show how many galaxies are left after color cuts
+          ; Finally, compute density and errors: 
+             densities_cuts = double(blob_ngal_binned_cuts)/(!dPI*ap_radius[r]^2.) 
+             density_errors_cuts = double(blob_ngalerr_binned_cuts)/(!dPI*ap_radius[r]^2.)
+             densities_cuts_mid = double(blob_ngal_binned_cuts_mid)/(!dPI*ap_radius[r]^2.) 
+             density_errors_cuts_mid = double(blob_ngalerr_binned_cuts_mid)/(!dPI*ap_radius[r]^2.)
+             densities_cuts_blue = double(blob_ngal_binned_cuts_blue)/(!dPI*ap_radius[r]^2.) 
+             density_errors_cuts_blue = double(blob_ngalerr_binned_cuts_blue)/(!dPI*ap_radius[r]^2.)
 
 
 
 
 
-;  ; see if user wants to do the overdensity (ie, field sampling) stuff 
-;  proceed=''
-;  READ, proceed, PROMPT='Proceed with field density/overdensity analysis? (y/n)'
-;  IF (proceed EQ 'n') THEN BEGIN 
-;    print, 'Moving on to the next blob.' 
-;  ENDIF ELSE IF ((proceed NE 'y') AND (proceed NE 'n')) THEN BEGIN 
-;    WHILE ((proceed NE 'y') AND (proceed NE 'n')) DO BEGIN 
-;      print, 'Invalid response. Choose y or n.' 
-;      READ, proceed, PROMPT='Proceed with field density/overdensity analysis? (y/n)'
-;    ENDWHILE
-;  ENDIF ELSE IF (proceed EQ 'y') THEN BEGIN 
-  print, 'Now sampling the field for overdensity analysis.' 
+; make this stuff into a procedure too
 
-    ; SAMPLING THE FIELD with random apertures 
+     print, 'Now sampling the field for overdensity analysis.' 
 
-    ; set up the arrays which will contain all the information about the random apertures placed
-    ap_ras = dblarr(nApertures)     ; this will contain RAs of all apertures
-    ap_decs = dblarr(nApertures)    ; this will contain declinations of all apertures
-    ; red band 
-    ap_ngal_binned = dblarr(nbins,nApertures)   ; this will contain # galaxies in each aperture in each mag bin
-    ap_ngalerr_binned = dblarr(nbins,nApertures)   ; same as above but errors on # rather than just #
-    ap_ngal_binned_cuts = dblarr(nbins,nApertures)  
-    ap_ngalerr_binned_cuts = dblarr(nbins,nApertures)   
-    megalist = list()   ; list of lists, each corresponding to one aperture, containing the ID #s of all the galaxies in each mag bin 
-    megalist_cuts = list() 
-    ; middle band 
-    ap_ngal_binned_mid = dblarr(nbins,nApertures)   ; this will contain # galaxies in each aperture in each mag bin
-    ap_ngalerr_binned_mid = dblarr(nbins,nApertures)   ; same as above but errors on # rather than just #
-    ap_ngal_binned_cuts_mid = dblarr(nbins,nApertures)  
-    ap_ngalerr_binned_cuts_mid = dblarr(nbins,nApertures)   
-    megalist_mid = list()   ; list of lists, each corresponding to one aperture, containing the ID #s of all the galaxies in each mag bin 
-    megalist_cuts_mid = list() 
-    ; blue band 
-    ap_ngal_binned_blue = dblarr(nbins,nApertures)   ; this will contain # galaxies in each aperture in each mag bin
-    ap_ngalerr_binned_blue = dblarr(nbins,nApertures)   ; same as above but errors on # rather than just #
-    ap_ngal_binned_cuts_blue = dblarr(nbins,nApertures)  
-    ap_ngalerr_binned_cuts_blue = dblarr(nbins,nApertures)   
-    megalist_blue = list()   ; list of lists, each corresponding to one aperture, containing the ID #s of all the galaxies in each mag bin 
-    megalist_cuts_blue = list() 
-    ; make an aperture image and blank image into which to insert it 
-    dist_ellipse, dim, [ 2.*ap_radius_pix[r], 2.*ap_radius_pix[r] ], ap_radius_pix[r], ap_radius_pix[r], 1.,0.
-    blankim = ap_radius_pix[r]+fltarr(npix_x,npix_y)  
-    ap_count = 0 ; keep track of how many apertures are made in total 
+     ; SAMPLING THE FIELD with random apertures 
 
-    ; now place random apertures and count galaxies inside them 
-    TIC        ; time this to ensure that it's efficient 
-    FOR ap=0, nApertures-1 DO BEGIN
-      repeatflag = 0.       ; this will ensure that apertures don't get wasted on areas with only bad pixels 
-      ap_count++ 
-      WHILE (repeatflag EQ 0.) DO BEGIN
-        ; make a random aperture:
-        ap_x = floor(ap_radius_pix[r] + (double(npix_x)-2.*ap_radius_pix[r])*randomu(seed))
-        ap_y = floor(ap_radius_pix[r] + (double(npix_y)-2.*ap_radius_pix[r])*randomu(seed))
+     ; set up the arrays which will contain all the information about the random apertures placed
+     ap_ras = dblarr(nApertures)     ; this will contain RAs of all apertures
+     ap_decs = dblarr(nApertures)    ; this will contain declinations of all apertures
+     ; red band 
+     ap_ngal_binned = dblarr(nbins,nApertures)   ; this will contain # galaxies in each aperture in each mag bin
+     ap_ngalerr_binned = dblarr(nbins,nApertures)   ; same as above but errors on # rather than just #
+     ap_ngal_binned_cuts = dblarr(nbins,nApertures)  
+     ap_ngalerr_binned_cuts = dblarr(nbins,nApertures)   
+     megalist = list()   ; list of lists, each corresponding to one aperture, containing the ID #s of all the galaxies in each mag bin 
+     megalist_cuts = list() 
+     ; middle band 
+     ap_ngal_binned_mid = dblarr(nbins,nApertures)   ; this will contain # galaxies in each aperture in each mag bin
+     ap_ngalerr_binned_mid = dblarr(nbins,nApertures)   ; same as above but errors on # rather than just #
+     ap_ngal_binned_cuts_mid = dblarr(nbins,nApertures)  
+     ap_ngalerr_binned_cuts_mid = dblarr(nbins,nApertures)   
+     megalist_mid = list()   ; list of lists, each corresponding to one aperture, containing the ID #s of all the galaxies in each mag bin 
+     megalist_cuts_mid = list() 
+     ; blue band 
+     ap_ngal_binned_blue = dblarr(nbins,nApertures)   ; this will contain # galaxies in each aperture in each mag bin
+     ap_ngalerr_binned_blue = dblarr(nbins,nApertures)   ; same as above but errors on # rather than just #
+     ap_ngal_binned_cuts_blue = dblarr(nbins,nApertures)  
+     ap_ngalerr_binned_cuts_blue = dblarr(nbins,nApertures)   
+     megalist_blue = list()   ; list of lists, each corresponding to one aperture, containing the ID #s of all the galaxies in each mag bin 
+     megalist_cuts_blue = list() 
+     ; make an aperture image and blank image into which to insert it 
+     dist_ellipse, dim, [ 2.*ap_radius_pix[r], 2.*ap_radius_pix[r] ], ap_radius_pix[r], ap_radius_pix[r], 1.,0.
+     blankim = ap_radius_pix[r]+fltarr(npix_x,npix_y)  
+     ap_count = 0 ; keep track of how many apertures are made in total  
+
+     ; now place random apertures and count galaxies inside them 
+     TIC        ; time this to ensure that it's efficient 
+     FOR ap=0, nApertures-1 DO BEGIN
+       repeatflag = 0.       ; this will ensure that apertures don't get wasted on areas with only bad pixels 
+       ap_count++ 
+       WHILE (repeatflag EQ 0.) DO BEGIN
+         ; make a random aperture:
+         ap_x = floor(ap_radius_pix[r] + (double(npix_x)-2.*ap_radius_pix[r])*randomu(seed))
+         ap_y = floor(ap_radius_pix[r] + (double(npix_y)-2.*ap_radius_pix[r])*randomu(seed)) 
 
 
-        ; FIND BAD PIXELS:
-         ; find corners of box in which to insert aperture image 
-         xlo = ap_x - floor(ap_radius_pix[r]) 
-         xhi = ap_x + floor(ap_radius_pix[r])
-         ylo = ap_y - floor(ap_radius_pix[r])  
-         yhi = ap_y + floor(ap_radius_pix[r])
-         dimsize = size(dim)
-         IF ((xhi-xlo) NE (dimsize[1]-1.)) THEN BEGIN 
-           xhi = ap_x + floor(ap_radius_pix[r]) - 1.
-         ENDIF
-         IF ((yhi-ylo) NE (dimsize[2]-1.)) THEN BEGIN 
-           yhi = ap_y + floor(ap_radius_pix[r]) - 1.
-         ENDIF
-         ; create new image using array arithmetic: blank image with dim inserted into it 
-         newap = blankim 
-         newap[xlo:xhi,ylo:yhi] = dim 
-         ; ignore everything outside the random aperture to make aperture map 
-         index = where(newap LT ap_radius_pix[r]) 
-         wheretomulti, newap, index, col, row, frame
-         newap[*,*] = 0. 
-         newap[col,row]  = 1. 
-         ; multiply the aperture map by the bpm so only GOOD pixels INSIDE the aperture are left: 
-         apbpm = bpm*newap          
-         badpix = where(apbpm GT 0, nbadpix)   ; label the bad pixels
-         ntotalpix = n_elements(apbpm)         ; get the total number of pixels in the aperture
+         ; FIND BAD PIXELS:
+          ; find corners of box in which to insert aperture image 
+          xlo = ap_x - floor(ap_radius_pix[r]) 
+          xhi = ap_x + floor(ap_radius_pix[r])
+          ylo = ap_y - floor(ap_radius_pix[r])  
+          yhi = ap_y + floor(ap_radius_pix[r])
+          dimsize = size(dim)
+          IF ((xhi-xlo) NE (dimsize[1]-1.)) THEN BEGIN 
+            xhi = ap_x + floor(ap_radius_pix[r]) - 1.
+          ENDIF
+          IF ((yhi-ylo) NE (dimsize[2]-1.)) THEN BEGIN 
+            yhi = ap_y + floor(ap_radius_pix[r]) - 1.
+          ENDIF
+          ; create new image using array arithmetic: blank image with dim inserted into it 
+          newap = blankim 
+          newap[xlo:xhi,ylo:yhi] = dim 
+          ; ignore everything outside the random aperture to make aperture map 
+          index = where(newap LT ap_radius_pix[r]) 
+          wheretomulti, newap, index, col, row, frame
+          newap[*,*] = 0. 
+          newap[col,row]  = 1. 
+          ; multiply the aperture map by the bpm so only GOOD pixels INSIDE the aperture are left: 
+          apbpm = bpm*newap          
+          badpix = where(apbpm GT 0, nbadpix)   ; label the bad pixels
+          ntotalpix = n_elements(apbpm)         ; get the total number of pixels in the aperture
 
-        ; FIND VICINITY TO BLOB: 
-         xyad, hdr,ap_x, ap_y, ap_ra, ap_dec      ; convert pixels into coordnates in sky
-         ; find how close the aperture is to the blob:
-         vicinity = sqrt(  ( (blobra[blob] - ap_ra) * cos(blobdec[blob]*!dPI/180.) )^2. + (blobdec[blob] - ap_dec)^2. )
+         ; FIND VICINITY TO BLOB: 
+          xyad, hdr,ap_x, ap_y, ap_ra, ap_dec      ; convert pixels into coordnates in sky
+          ; find how close the aperture is to the blob:
+          vicinity = sqrt(  ( (blobra[blob] - ap_ra) * cos(blobdec[blob]*!dPI/180.) )^2. + (blobdec[blob] - ap_dec)^2. )
 
-        ; if the aperture has at least some good pixels AND isn't near the blob, then keep it; otherwise, throw it out and make a new aperture  
-        IF ((nbadpix LT ntotalpix) AND (vicinity GT 2.*ap_radius[r])) THEN BEGIN 
-          repeatflag = 1. 
-        ENDIF ELSE BEGIN 
-          repeatflag = 0. 
-          ap_count++    ; note that another aperture is being made since this one failed to meet the criteria for a good aperture 
-        ENDELSE 
-      ENDWHILE
-      ; once the aperture passes the above WHILE test, it can be used
+         ; if the aperture has at least some good pixels AND isn't near the blob, then keep it; otherwise, throw it out and make a new aperture  
+         IF ((nbadpix LT ntotalpix) AND (vicinity GT 2.*ap_radius[r])) THEN BEGIN 
+           repeatflag = 1. 
+         ENDIF ELSE BEGIN 
+           repeatflag = 0. 
+           ap_count++    ; note that another aperture is being made since this one failed to meet the criteria for a good aperture 
+         ENDELSE 
+       ENDWHILE
+       ; once the aperture passes the above WHILE test, it can be used
 
-      ; fraction of aperture that is good pixels:
-      ap_area_weight = (float(ntotalpix) - float(nbadpix)) / float(ntotalpix) 
+       ; fraction of aperture that is good pixels:
+       ap_area_weight = (float(ntotalpix) - float(nbadpix)) / float(ntotalpix) 
  
-      ; convert pixels to sky coords and add these coords to arrays of aperture properties
-      xyad, hdr,ap_x, ap_y, ap_ra, ap_dec
-      ap_ras[ap] = ap_ra
-      ap_decs[ap] = ap_dec
+       ; convert pixels to sky coords and add these coords to arrays of aperture properties
+       xyad, hdr,ap_x, ap_y, ap_ra, ap_dec
+       ap_ras[ap] = ap_ra
+       ap_decs[ap] = ap_dec 
 
-      ; get list of galaxy IDs in each mag bin for this aperture
-      ap_galaxy_maglist = list()
-      ap_galaxy_maglist_cuts = list()
-      ap_galaxy_maglist_mid = list()
-      ap_galaxy_maglist_cuts_mid = list()
-      ap_galaxy_maglist_blue = list()
-      ap_galaxy_maglist_cuts_blue = list()
-      FOR mag=brightestmag, dimmestmag, binsize DO BEGIN
-        ; red band
-        ap_galaxies_binned=get_galaxies_binned(ap_ra, ap_dec, ap_radius[r], datared, mag, mag+binsize)
-        ap_galaxies_binned_cuts = get_galaxies_binned(ap_ra, ap_dec, ap_radius[r], dataredcut, mag, mag+binsize)
-        ap_galaxy_maglist.Add, ap_galaxies_binned
-        ap_galaxy_maglist_cuts.Add, ap_galaxies_binned_cuts
-        ; middle band
-        ap_galaxies_binned_mid=get_galaxies_binned(ap_ra, ap_dec, ap_radius[r], datamid, mag, mag+binsize)
-        ap_galaxies_binned_cuts_mid = get_galaxies_binned(ap_ra, ap_dec, ap_radius[r], datamidcut, mag, mag+binsize)
-        ap_galaxy_maglist_mid.Add, ap_galaxies_binned_mid
-        ap_galaxy_maglist_cuts_mid.Add, ap_galaxies_binned_cuts_mid
-        ; blue band
-        ap_galaxies_binned_blue=get_galaxies_binned(ap_ra, ap_dec, ap_radius[r], datablue, mag, mag+binsize)
-        ap_galaxies_binned_cuts_blue = get_galaxies_binned(ap_ra, ap_dec, ap_radius[r], databluecut, mag, mag+binsize)
-        ap_galaxy_maglist_blue.Add, ap_galaxies_binned_blue
-        ap_galaxy_maglist_cuts_blue.Add, ap_galaxies_binned_cuts_blue
-      ENDFOR 
-      ; put the list of ID numbers per mag bin in this aperture into the mega list for all apertures:
-      megalist.Add, ap_galaxy_maglist   
-      megalist_cuts.Add, ap_galaxy_maglist_cuts
-      megalist_mid.Add, ap_galaxy_maglist_mid   
-      megalist_cuts_mid.Add, ap_galaxy_maglist_cuts_mid
-      megalist_blue.Add, ap_galaxy_maglist_blue   
-      megalist_cuts_blue.Add, ap_galaxy_maglist_cuts_blue
+       ; get list of galaxy IDs in each mag bin for this aperture
+       ap_galaxy_maglist = list()
+       ap_galaxy_maglist_cuts = list()
+       ap_galaxy_maglist_mid = list()
+       ap_galaxy_maglist_cuts_mid = list()
+       ap_galaxy_maglist_blue = list()
+       ap_galaxy_maglist_cuts_blue = list()
+       FOR mag=brightestmag, dimmestmag, binsize DO BEGIN
+         ; red band
+         ap_galaxies_binned=get_galaxies_binned(ap_ra, ap_dec, ap_radius[r], datared, mag, mag+binsize)
+         ap_galaxies_binned_cuts = get_galaxies_binned(ap_ra, ap_dec, ap_radius[r], dataredcut, mag, mag+binsize)
+         ap_galaxy_maglist.Add, ap_galaxies_binned
+         ap_galaxy_maglist_cuts.Add, ap_galaxies_binned_cuts
+         ; middle band
+         ap_galaxies_binned_mid=get_galaxies_binned(ap_ra, ap_dec, ap_radius[r], datamid, mag, mag+binsize)
+         ap_galaxies_binned_cuts_mid = get_galaxies_binned(ap_ra, ap_dec, ap_radius[r], datamidcut, mag, mag+binsize)
+         ap_galaxy_maglist_mid.Add, ap_galaxies_binned_mid
+         ap_galaxy_maglist_cuts_mid.Add, ap_galaxies_binned_cuts_mid
+         ; blue band
+         ap_galaxies_binned_blue=get_galaxies_binned(ap_ra, ap_dec, ap_radius[r], datablue, mag, mag+binsize)
+         ap_galaxies_binned_cuts_blue = get_galaxies_binned(ap_ra, ap_dec, ap_radius[r], databluecut, mag, mag+binsize)
+         ap_galaxy_maglist_blue.Add, ap_galaxies_binned_blue
+         ap_galaxy_maglist_cuts_blue.Add, ap_galaxies_binned_cuts_blue
+       ENDFOR 
+       ; put the list of ID numbers per mag bin in this aperture into the mega list for all apertures:
+       megalist.Add, ap_galaxy_maglist   
+       megalist_cuts.Add, ap_galaxy_maglist_cuts
+       megalist_mid.Add, ap_galaxy_maglist_mid   
+       megalist_cuts_mid.Add, ap_galaxy_maglist_cuts_mid
+       megalist_blue.Add, ap_galaxy_maglist_blue   
+       megalist_cuts_blue.Add, ap_galaxy_maglist_cuts_blue
 
-      ; get number of galaxies in each bin and error for this aperture 
-      FOR i=0, nbins-1. DO BEGIN
-        ; red band 
-        bin = ap_galaxy_maglist[i]
-        IF (bin[0] EQ -1) THEN ngal = 0. ELSE ngal = n_elements(bin) 
-        ap_ngal_binned[i,ap] = ngal 
-        ap_ngalerr_binned[i,ap] = Poisson_error(ngal)
-        ; middle band 
-        bin_mid = ap_galaxy_maglist_mid[i]
-        IF (bin_mid[0] EQ -1) THEN ngal_mid = 0. ELSE ngal_mid = n_elements(bin_mid) 
-        ap_ngal_binned_mid[i,ap] = ngal_mid 
-        ap_ngalerr_binned_mid[i,ap] = Poisson_error(ngal_mid)
-        ; blue band 
-        bin_blue = ap_galaxy_maglist_blue[i]
-        IF (bin_blue[0] EQ -1) THEN ngal_blue = 0. ELSE ngal_blue = n_elements(bin_blue) 
-        ap_ngal_binned_blue[i,ap] = ngal_blue 
-        ap_ngalerr_binned_blue[i,ap] = Poisson_error(ngal_blue)
-      ENDFOR 
-      ; same as before but with color cuts 
-      FOR i=0, nbins-1. DO BEGIN
-        ; red band 
-        bin = ap_galaxy_maglist_cuts[i]
-        IF (bin[0] EQ -1) THEN ngal = 0. ELSE ngal = n_elements(bin) 
-        ap_ngal_binned_cuts[i,ap] = ngal 
-        ap_ngalerr_binned_cuts[i,ap] = Poisson_error(ngal)
-        ; middle band 
-        bin_mid = ap_galaxy_maglist_cuts_mid[i]
-        IF (bin_mid[0] EQ -1) THEN ngal_mid = 0. ELSE ngal_mid = n_elements(bin_mid) 
-        ap_ngal_binned_cuts_mid[i,ap] = ngal_mid 
-        ap_ngalerr_binned_cuts_mid[i,ap] = Poisson_error(ngal_mid)
-        ; blue band 
-        bin_blue = ap_galaxy_maglist_cuts_blue[i]
-        IF (bin_blue[0] EQ -1) THEN ngal_blue = 0. ELSE ngal_blue = n_elements(bin_blue) 
-        ap_ngal_binned_cuts_blue[i,ap] = ngal_blue 
-        ap_ngalerr_binned_cuts_blue[i,ap] = Poisson_error(ngal_blue)
-      ENDFOR 
+       ; get number of galaxies in each bin and error for this aperture 
+       FOR i=0, nbins-1. DO BEGIN
+         ; red band 
+         bin = ap_galaxy_maglist[i]
+         IF (bin[0] EQ -1) THEN ngal = 0. ELSE ngal = n_elements(bin) 
+         ap_ngal_binned[i,ap] = ngal 
+         ap_ngalerr_binned[i,ap] = Poisson_error(ngal)
+         ; middle band 
+         bin_mid = ap_galaxy_maglist_mid[i]
+         IF (bin_mid[0] EQ -1) THEN ngal_mid = 0. ELSE ngal_mid = n_elements(bin_mid) 
+         ap_ngal_binned_mid[i,ap] = ngal_mid 
+         ap_ngalerr_binned_mid[i,ap] = Poisson_error(ngal_mid)
+         ; blue band 
+         bin_blue = ap_galaxy_maglist_blue[i]
+         IF (bin_blue[0] EQ -1) THEN ngal_blue = 0. ELSE ngal_blue = n_elements(bin_blue) 
+         ap_ngal_binned_blue[i,ap] = ngal_blue 
+         ap_ngalerr_binned_blue[i,ap] = Poisson_error(ngal_blue)
+       ENDFOR 
+       ; same as before but with color cuts 
+       FOR i=0, nbins-1. DO BEGIN
+         ; red band 
+         bin = ap_galaxy_maglist_cuts[i]
+         IF (bin[0] EQ -1) THEN ngal = 0. ELSE ngal = n_elements(bin) 
+         ap_ngal_binned_cuts[i,ap] = ngal 
+         ap_ngalerr_binned_cuts[i,ap] = Poisson_error(ngal)
+         ; middle band 
+         bin_mid = ap_galaxy_maglist_cuts_mid[i]
+         IF (bin_mid[0] EQ -1) THEN ngal_mid = 0. ELSE ngal_mid = n_elements(bin_mid) 
+         ap_ngal_binned_cuts_mid[i,ap] = ngal_mid 
+         ap_ngalerr_binned_cuts_mid[i,ap] = Poisson_error(ngal_mid)
+         ; blue band 
+         bin_blue = ap_galaxy_maglist_cuts_blue[i]
+         IF (bin_blue[0] EQ -1) THEN ngal_blue = 0. ELSE ngal_blue = n_elements(bin_blue) 
+         ap_ngal_binned_cuts_blue[i,ap] = ngal_blue 
+         ap_ngalerr_binned_cuts_blue[i,ap] = Poisson_error(ngal_blue)
+       ENDFOR 
 
-    ENDFOR    ; all the random apertures 
-    print, ap_count ; How many total apertures were generated? 
-    TOC             ; How long did this analysis take? 
+     ENDFOR    ; all the random apertures 
+     print, ap_count ; How many total apertures were generated? 
+     TOC             ; How long did this analysis take? 
+
+; end of stuff for new procedure 
 
 
-    ; calculate densities in each bin in each aperture and errors: 
-       ; red band 
+    ; calculate densities in each bin in each aperture and errors, then average the densities of all the apertures in each bin to get average field density in each bin: 
+    ;
+    ; RED BAND, NO CUTS 
     ap_densities = double(ap_ngal_binned)/(!dPI*ap_radius[r]^2.*ap_area_weight)           ; array of the densities in each aperture in each mag bin
     ap_density_errors = double(ap_ngalerr_binned)/(!dPI*ap_radius[r]^2.*ap_area_weight)   ; same as above except errors 
-       ; middle band 
-    ap_densities_mid = double(ap_ngal_binned_mid)/(!dPI*ap_radius[r]^2.*ap_area_weight)           ; array of the densities in each aperture in each mag bin
-    ap_density_errors_mid = double(ap_ngalerr_binned_mid)/(!dPI*ap_radius[r]^2.*ap_area_weight)   ; same as above except errors 
-       ; blue band 
-    ap_densities_blue = double(ap_ngal_binned_blue)/(!dPI*ap_radius[r]^2.*ap_area_weight)           ; array of the densities in each aperture in each mag bin
-    ap_density_errors_blue = double(ap_ngalerr_binned_blue)/(!dPI*ap_radius[r]^2.*ap_area_weight)   ; same as above except errors 
-    ; average the densities of all the apertures in each bin to get average field density in each bin: 
-       ; red band 
     field_densities = total(ap_densities,2)/double(nApertures)             ; field density in each bin 
     field_density_errors = total(ap_density_errors,2)/double(nApertures)   ; errors in field density in each bin 
-       ; middle band 
+    radiusresults_red_nocuts[r,*,0] = densities/field_densities            ; overdensity factor
+    radiusresults_red_nocuts[r,*,1] = density_errors/field_densities       ; error on overdensity factor
+    ;
+    ; MIDDLE BAND, NO CUTS 
+    ap_densities_mid = double(ap_ngal_binned_mid)/(!dPI*ap_radius[r]^2.*ap_area_weight)           ; array of the densities in each aperture in each mag bin
+    ap_density_errors_mid = double(ap_ngalerr_binned_mid)/(!dPI*ap_radius[r]^2.*ap_area_weight)   ; same as above except errors 
     field_densities_mid = total(ap_densities_mid,2)/double(nApertures)             ; field density in each bin 
     field_density_errors_mid = total(ap_density_errors_mid,2)/double(nApertures)   ; errors in field density in each bin 
-       ; blue band 
+    radiusresults_mid_nocuts[r,*,0] = densities_mid/field_densities_mid            ; overdensity factor
+    radiusresults_mid_nocuts[r,*,1] = density_errors_mid/field_densities_mid       ; error on overdensity factor
+    ;
+    ; BLUE BAND, NO CUTS
+    ap_densities_blue = double(ap_ngal_binned_blue)/(!dPI*ap_radius[r]^2.*ap_area_weight)           ; array of the densities in each aperture in each mag bin
+    ap_density_errors_blue = double(ap_ngalerr_binned_blue)/(!dPI*ap_radius[r]^2.*ap_area_weight)   ; same as above except errors 
     field_densities_blue = total(ap_densities_blue,2)/double(nApertures)             ; field density in each bin 
     field_density_errors_blue = total(ap_density_errors_blue,2)/double(nApertures)   ; errors in field density in each bin 
-
-
-    ; calculate densities in each bin in each aperture and errors WITH COLOR CUTS: 
-       ; red band 
+    radiusresults_blue_nocuts[r,*,0] = densities_blue/field_densities_blue           ; overdensity factor
+    radiusresults_blue_nocuts[r,*,1] = density_errors_blue/field_densities_blue      ; error on overdensity factor
+    ;
+    ; RED BAND WITH CUTS
     ap_densities_cuts = double(ap_ngal_binned_cuts)/(!dPI*ap_radius[r]^2.*ap_area_weight)           ; array of the densities in each aperture in each mag bin
     ap_density_errors_cuts = double(ap_ngalerr_binned_cuts)/(!dPI*ap_radius[r]^2.*ap_area_weight)   ; same as above except errors 
-       ; middle band 
+    field_densities_cuts = total(ap_densities_cuts,2)/double(nApertures)             ; field density in each bin 
+    field_density_errors_cuts = total(ap_density_errors_cuts,2)/double(nApertures)   ; errors in field density in each bin
+    radiusresults_red_cuts[r,*,0] = densities_cuts/field_densities_cuts              ; overdensity factor
+    radiusresults_red_cuts[r,*,1] = density_errors_cuts/field_densities_cuts         ; error on overdensity factor
+    ;
+    ; MIDDLE BAND WITH CUTS
     ap_densities_cuts_mid = double(ap_ngal_binned_cuts_mid)/(!dPI*ap_radius[r]^2.*ap_area_weight)           ; array of the densities in each aperture in each mag bin
     ap_density_errors_cuts_mid = double(ap_ngalerr_binned_cuts_mid)/(!dPI*ap_radius[r]^2.*ap_area_weight)   ; same as above except errors 
-       ; blue band 
-    ap_densities_cuts_blue = double(ap_ngal_binned_cuts_blue)/(!dPI*ap_radius[r]^2.*ap_area_weight)           ; array of the densities in each aperture in each mag bin
-    ap_density_errors_cuts_blue = double(ap_ngalerr_binned_cuts_blue)/(!dPI*ap_radius[r]^2.*ap_area_weight)   ; same as above except errors 
-    ; average the densities of all the apertures in each bin to get average field density in each bin with color cuts: 
-       ; red band 
-    field_densities_cuts = total(ap_densities_cuts,2)/double(nApertures)             ; field density in each bin 
-    field_density_errors_cuts = total(ap_density_errors_cuts,2)/double(nApertures)   ; errors in field density in each bin 
-       ; middle band 
     field_densities_cuts_mid = total(ap_densities_cuts_mid,2)/double(nApertures)             ; field density in each bin 
     field_density_errors_cuts_mid = total(ap_density_errors_cuts_mid,2)/double(nApertures)   ; errors in field density in each bin 
-       ; blue band 
+    radiusresults_mid_cuts[r,*,0] = densities_cuts_mid/field_densities_cuts_mid              ; overdensity factor
+    radiusresults_mid_cuts[r,*,1] = density_errors_cuts_mid/field_densities_cuts_mid         ; error on overdensity factor
+    ;
+    ; BLUE BAND WITH CUTS
+    ap_densities_cuts_blue = double(ap_ngal_binned_cuts_blue)/(!dPI*ap_radius[r]^2.*ap_area_weight)           ; array of the densities in each aperture in each mag bin
+    ap_density_errors_cuts_blue = double(ap_ngalerr_binned_cuts_blue)/(!dPI*ap_radius[r]^2.*ap_area_weight)   ; same as above except errors 
     field_densities_cuts_blue = total(ap_densities_cuts_blue,2)/double(nApertures)             ; field density in each bin 
     field_density_errors_cuts_blue = total(ap_density_errors_cuts_blue,2)/double(nApertures)   ; errors in field density in each bin 
+    radiusresults_blue_cuts[r,*,0] = densities_cuts_blue/field_densities_cuts_blue             ; overdensity factor
+    radiusresults_blue_cuts[r,*,1] = density_errors_cuts_blue/field_densities_cuts_blue        ; error on overdensity factor
 
 
 
-    ; MAIN OVERDENSITY PLOT:
-    
-    ; RED BAND 
-    ; set up vertices of polygon for polyfill
-      ; x is for all bands 
-    xpoints = dblarr(2*nbins)
-    xpoints[0:nbins-1] = mags
-    FOR i=0, nbins-1 DO BEGIN
-     xpoints[i+nbins] = mags[nbins-1-i]
-    ENDFOR 
-    ; y is specific to each catalog (band) 
-    ypoints=dblarr(2*nbins)
-    ypoints[0:nbins-1] = field_densities-field_density_errors
-    FOR i=0, nbins-1 DO BEGIN
-    ypoints[i+nbins] = field_densities[nbins-1-i]+field_density_errors[nbins-1-i]
-    ENDFOR
-    ; make the main plot comparing blob to field with error bars 
-    window, 1, retain=2, xsize=1200, ysize=1000
-    title=("Galaxy Overdensity in Blob Region for " + blobname[blob] + apsnameplot)
-    plot, mags, densities, xtitle="magnitude (F140W)", ytitle="N!Igal!N per deg!E2!N per 0.5 mag", title=title, xthick=2,ythick=2,background=255, color=0, charsize=2., psym=-8, /ylog, yrange=[1d3,1d6], /ystyle, xrange=[22.5,29.5], /xstyle, charthick=2 
-    polyfill, xpoints, ypoints, color=200, clip=[22.5,1d3,29.5,1d6], /data, noclip=0
-    errplot, mags, densities-density_errors, densities+density_errors, color=0, thick=2
-    oplot, mags, densities, psym=-8, color=0, thick=2     ; have to do this again because polyfill covers it up 
-    oplot, mags, field_densities, color=0, linestyle=2, thick=2
-    LEGEND, ['blob','field'], /right, /top, color=0, textcolor=0, linestyle=[0,2], thick=2., charsize=1.5, box=0, number=0.1, charthick=1.5   
-    axis, color=0, xaxis=0, xrange=[22.5,29.5], /xstyle, /data, charsize=2, charthick=2, xtickformat="(A1)", xthick=2
-    axis, color=0, xaxis=1, xrange=[22.5,29.5], /xstyle, /data, charsize=0, xtickformat="(A1)", xthick=2
-    axis, color=0, yaxis=0, /ylog, yrange=[1d3,1d6], /ystyle,  /ynozero, /data, charsize=2, charthick=2, ytickformat="(A1)", ythick=2
-    axis, color=0, yaxis=1, /ylog, yrange=[1d3,1d6], /ystyle,  /ynozero, /data, charsize=0, ytickformat="(A1)", ythick=2
-  IF (saveanyplots EQ 'y') THEN BEGIN 
-    saveplot = ''
-    READ, saveplot, PROMPT='Save overdensity plot? (y/n)'
-    IF (saveplot EQ 'y') THEN BEGIN 
-       namestring = string(blobname[blob]) + '_overdensity' + apsnamesave + '.png'
-       write_png, namestring, tvrd(/true) 
-    ENDIF ELSE IF ((saveplot NE 'y') AND (saveplot NE 'n')) THEN BEGIN 
-      WHILE ((saveplot NE 'y') AND (saveplot NE 'n')) DO BEGIN 
-        print, 'Invalid response. Choose y or n.' 
-        READ, saveplot, PROMPT='Save overdensity plot? (y/n)'
-      ENDWHILE
-    ENDIF ELSE IF (saveplot EQ 'n') THEN BEGIN
-      print, 'Overdensity plot not saved.'
-    ENDIF 
-    wdelete, 1
-  ENDIF   ; user wants to save at least some plots
-    radiusresults_red_nocuts[r,*,0] = densities/field_densities 
-    radiusresults_red_nocuts[r,*,1] = density_errors/field_densities
 
-    ; MIDDLE BAND 
-    ; set up vertices of polygon for polyfill
-    ypoints=dblarr(2*nbins)
-    ypoints[0:nbins-1] = field_densities_mid-field_density_errors_mid
-    FOR i=0, nbins-1 DO BEGIN
-    ypoints[i+nbins] = field_densities_mid[nbins-1-i]+field_density_errors_mid[nbins-1-i]
-    ENDFOR
-    ; make the main plot comparing blob to field with error bars 
-    window, 1, retain=2, xsize=1200, ysize=1000
-    title=("Galaxy Overdensity in Blob Region for " + blobname[blob] + apsnameplot)
-    plot, mags, densities_mid, xtitle="magnitude (F814W)", ytitle="N!Igal!N per deg!E2!N per 0.5 mag", title=title, xthick=2,ythick=2,background=255, color=0, charsize=2., psym=-8, /ylog, yrange=[1d3,1d6], /ystyle, xrange=[22.5,29.5], /xstyle, charthick=2 
-    polyfill, xpoints, ypoints, color=200, clip=[22.5,1d3,29.5,1d6], /data, noclip=0
-    errplot, mags, densities_mid-density_errors_mid, densities_mid+density_errors_mid, color=0, thick=2
-    oplot, mags, densities_mid, psym=-8, color=0, thick=2     ; have to do this again because polyfill covers it up 
-    oplot, mags, field_densities_mid, color=0, linestyle=2, thick=2
-    LEGEND, ['blob','field'], /right, /top, color=0, textcolor=0, linestyle=[0,2], thick=2., charsize=1.5, box=0, number=0.1, charthick=1.5   
-    axis, color=0, xaxis=0, xrange=[22.5,29.5], /xstyle, /data, charsize=2, charthick=2, xtickformat="(A1)", xthick=2
-    axis, color=0, xaxis=1, xrange=[22.5,29.5], /xstyle, /data, charsize=0, xtickformat="(A1)", xthick=2
-    axis, color=0, yaxis=0, /ylog, yrange=[1d3,1d6], /ystyle,  /ynozero, /data, charsize=2, charthick=2, ytickformat="(A1)", ythick=2
-    axis, color=0, yaxis=1, /ylog, yrange=[1d3,1d6], /ystyle,  /ynozero, /data, charsize=0, ytickformat="(A1)", ythick=2
-  IF (saveanyplots EQ 'y') THEN BEGIN 
-    saveplot = ''
-    READ, saveplot, PROMPT='Save overdensity plot? (y/n)'
-    IF (saveplot EQ 'y') THEN BEGIN 
-       namestring = string(blobname[blob]) + '_overdensity' + apsnamesave + '_mid.png'
-       write_png, namestring, tvrd(/true) 
-    ENDIF ELSE IF ((saveplot NE 'y') AND (saveplot NE 'n')) THEN BEGIN 
-      WHILE ((saveplot NE 'y') AND (saveplot NE 'n')) DO BEGIN 
-        print, 'Invalid response. Choose y or n.' 
-        READ, saveplot, PROMPT='Save overdensity plot? (y/n)'
-      ENDWHILE
-    ENDIF ELSE IF (saveplot EQ 'n') THEN BEGIN
-      print, 'Overdensity plot not saved.'
-    ENDIF 
-    wdelete, 1
-  ENDIF   ; user wants to save at least some plots
-    radiusresults_mid_nocuts[r,*,0] = densities_mid/field_densities_mid 
-    radiusresults_mid_nocuts[r,*,1] = density_errors_mid/field_densities_mid
-
-    ; BLUE BAND 
-    ; set up vertices of polygon for polyfill
-    ypoints=dblarr(2*nbins)
-    ypoints[0:nbins-1] = field_densities_blue-field_density_errors_blue
-    FOR i=0, nbins-1 DO BEGIN
-    ypoints[i+nbins] = field_densities_blue[nbins-1-i]+field_density_errors_blue[nbins-1-i]
-    ENDFOR
-    ; make the main plot comparing blob to field with error bars 
-    window, 1, retain=2, xsize=1200, ysize=1000
-    title=("Galaxy Overdensity in Blob Region for " + blobname[blob] + apsnameplot)
-    plot, mags, densities_blue, xtitle="magnitude (F475W/F606W)", ytitle="N!Igal!N per deg!E2!N per 0.5 mag", title=title, xthick=2,ythick=2,background=255, color=0, charsize=2., psym=-8, /ylog, yrange=[1d3,1d6], /ystyle, xrange=[22.5,29.5], /xstyle, charthick=2 
-    polyfill, xpoints, ypoints, color=200, clip=[22.5,1d3,29.5,1d6], /data, noclip=0
-    errplot, mags, densities_blue-density_errors_blue, densities_blue+density_errors_blue, color=0, thick=2
-    oplot, mags, densities_blue, psym=-8, color=0, thick=2     ; have to do this again because polyfill covers it up 
-    oplot, mags, field_densities_blue, color=0, linestyle=2, thick=2
-    LEGEND, ['blob','field'], /right, /top, color=0, textcolor=0, linestyle=[0,2], thick=2., charsize=1.5, box=0, number=0.1, charthick=1.5   
-    axis, color=0, xaxis=0, xrange=[22.5,29.5], /xstyle, /data, charsize=2, charthick=2, xtickformat="(A1)", xthick=2
-    axis, color=0, xaxis=1, xrange=[22.5,29.5], /xstyle, /data, charsize=0, xtickformat="(A1)", xthick=2
-    axis, color=0, yaxis=0, /ylog, yrange=[1d3,1d6], /ystyle,  /ynozero, /data, charsize=2, charthick=2, ytickformat="(A1)", ythick=2
-    axis, color=0, yaxis=1, /ylog, yrange=[1d3,1d6], /ystyle,  /ynozero, /data, charsize=0, ytickformat="(A1)", ythick=2
-  IF (saveanyplots EQ 'y') THEN BEGIN 
-    saveplot = ''
-    READ, saveplot, PROMPT='Save overdensity plot? (y/n)'
-    IF (saveplot EQ 'y') THEN BEGIN 
-       namestring = string(blobname[blob]) + '_overdensity' + apsnamesave + '_blue.png'
-       write_png, namestring, tvrd(/true) 
-    ENDIF ELSE IF ((saveplot NE 'y') AND (saveplot NE 'n')) THEN BEGIN 
-      WHILE ((saveplot NE 'y') AND (saveplot NE 'n')) DO BEGIN 
-        print, 'Invalid response. Choose y or n.' 
-        READ, saveplot, PROMPT='Save overdensity plot? (y/n)'
-      ENDWHILE
-    ENDIF ELSE IF (saveplot EQ 'n') THEN BEGIN
-      print, 'Overdensity plot not saved.'
-    ENDIF 
-    wdelete, 1
-  ENDIF   ; user wants to save at least some plots
-    radiusresults_blue_nocuts[r,*,0] = densities_blue/field_densities_blue 
-    radiusresults_blue_nocuts[r,*,1] = density_errors_blue/field_densities_blue
+    ; MAIN OVERDENSITY PLOTS:
+    ;
+    !P.MULTI = [0,2,3,0,1]
+    window, 1, retain=2, xsize=950, ysize=1200
+    ;
+    ; RED BAND, NO CUTS
+    densityplot, nbins, mags, field_densities, field_density_errors, densities, density_errors, blobname[blob], nApertures, ap_radius_arcsec[r], redname[blob], 'n'
+      ; namestring = titlemaker('overdensity', blobname[blob], nApertures=nApertures, radius=ap_radius_arcsec[r], band=redname[blob], cuts='n', filetype='.png')
+      ; plotsave, saveanyplots, namestring
+      ;
+    ; MIDDLE BAND, NO CUTS 
+    densityplot, nbins, mags, field_densities_mid, field_density_errors_mid, densities_mid, density_errors_mid, blobname[blob], nApertures, ap_radius_arcsec[r], midname[blob], 'n'
+      ; namestring = titlemaker('overdensity', blobname[blob], nApertures=nApertures, radius=ap_radius_arcsec[r], band=midname[blob], cuts='n', filetype='.png')
+      ; plotsave, saveanyplots, namestring
+      ;
+    ; BLUE BAND, NO CUTS 
+    densityplot, nbins, mags, field_densities_blue, field_density_errors_blue, densities_blue, density_errors_blue, blobname[blob], nApertures, ap_radius_arcsec[r], bluename[blob], 'n'
+      ; namestring = titlemaker('overdensity', blobname[blob], nApertures=nApertures, radius=ap_radius_arcsec[r], band=bluename[blob], cuts='n', filetype='.png')
+      ; plotsave, saveanyplots, namestring
+      ;
+    ; RED BAND WITH CUTS
+    densityplot, nbins, mags, field_densities_cuts, field_density_errors_cuts, densities_cuts, density_errors_cuts, blobname[blob], nApertures, ap_radius_arcsec[r], redname[blob], 'y'
+      ; namestring = titlemaker('overdensity', blobname[blob], nApertures=nApertures, radius=ap_radius_arcsec[r], band=redname[blob], cuts='y', filetype='.png')
+      ; plotsave, saveanyplots, namestring
+      ;
+    ; MIDDLE BAND WITH CUTS 
+    densityplot, nbins, mags, field_densities_cuts_mid, field_density_errors_cuts_mid, densities_cuts_mid, density_errors_cuts_mid, blobname[blob], nApertures, ap_radius_arcsec[r], midname[blob], 'y'
+      ; namestring = titlemaker('overdensity', blobname[blob], nApertures=nApertures, radius=ap_radius_arcsec[r], band=midname[blob], cuts='y', filetype='.png')
+      ; plotsave, saveanyplots, namestring
+      ;
+    ; BLUE BAND WITH CUTS 
+    densityplot, nbins, mags, field_densities_cuts_blue, field_density_errors_cuts_blue, densities_cuts_blue, density_errors_cuts_blue, blobname[blob], nApertures, ap_radius_arcsec[r], bluename[blob], 'y'
+      ; namestring = titlemaker('overdensity', blobname[blob], nApertures=nApertures, radius=ap_radius_arcsec[r], band=bluename[blob], cuts='y', filetype='.png')
+      ; plotsave, saveanyplots, namestring
+      ; 
+    namestring = titlemaker('overdensity', blobname[blob], nApertures=nApertures, radius=ap_radius_arcsec[r], filetype='.png')
+    plotsave, saveanyplots, namestring
 
 
 
- ; MAIN OVERDENSITY PLOT WITH COLOR CUTS:
-
-    ; RED BAND 
-    ; set up vertices of polygon for polyfill
-     ; x is for all bands 
-    xpoints = dblarr(2*nbins)
-    xpoints[0:nbins-1] = mags
-    FOR i=0, nbins-1 DO BEGIN
-     xpoints[i+nbins] = mags[nbins-1-i]
-    ENDFOR
-     ; y is specific for each catalog (band) 
-    ypoints=dblarr(2*nbins)
-    ypoints[0:nbins-1] = field_densities_cuts-field_density_errors_cuts
-    FOR i=0, nbins-1 DO BEGIN
-    ypoints[i+nbins] = field_densities_cuts[nbins-1-i]+field_density_errors_cuts[nbins-1-i]
-    ENDFOR
-    ; make the main plot comparing blob to field with error bars 
-    window, 2, retain=2, xsize=1200, ysize=1000
-    title=("Galaxy Overdensity in Blob Region for " + blobname[blob] + apsnameplot) + ' (with color cuts)'
-    plot, mags, densities_cuts, xtitle="magnitude (F140W)", ytitle="N!Igal!N per deg!E2!N per 0.5 mag", title=title,xthick=2,ythick=2,background=255, color=0, charsize=2., psym=-8, /ylog, yrange=[1d3,1d6], /ystyle, xrange=[22.5,29.5], /xstyle, charthick=2 
-    polyfill, xpoints, ypoints, color=200, clip=[22.5,1d3,29.5,1d6], /data, noclip=0
-    errplot, mags, densities_cuts-density_errors_cuts, densities_cuts+density_errors_cuts, color=0, thick=2
-    oplot, mags, densities_cuts, psym=-8, color=0, thick=2     ; have to do this again because polyfill covers it up 
-    oplot, mags, field_densities_cuts, color=0, linestyle=2, thick=2
-    LEGEND, ['blob','field'], /right, /top, color=0, textcolor=0, linestyle=[0,2], thick=2., charsize=1.5, box=0, number=0.1, charthick=1.5   
-    axis, color=0, xaxis=0, xrange=[22.5,29.5], /xstyle, /data, charsize=2, charthick=2, xtickformat="(A1)", xthick=2
-    axis, color=0, xaxis=1, xrange=[22.5,29.5], /xstyle, /data, charsize=0, xtickformat="(A1)", xthick=2
-    axis, color=0, yaxis=0, /ylog, yrange=[1d3,1d6], /ystyle,  /ynozero, /data, charsize=2, charthick=2, ytickformat="(A1)", ythick=2
-    axis, color=0, yaxis=1, /ylog, yrange=[1d3,1d6], /ystyle,  /ynozero, /data, charsize=0, ytickformat="(A1)", ythick=2
-  IF (saveanyplots EQ 'y') THEN BEGIN 
-    saveplot = ''
-    READ, saveplot, PROMPT='Save overdensity plot? (y/n)'
-    IF (saveplot EQ 'y') THEN BEGIN 
-       namestring = string(blobname[blob]) + '_overdensity' + apsnamesave + '_withcuts.png'
-       write_png, namestring, tvrd(/true) 
-    ENDIF ELSE IF ((saveplot NE 'y') AND (saveplot NE 'n')) THEN BEGIN 
-      WHILE ((saveplot NE 'y') AND (saveplot NE 'n')) DO BEGIN 
-        print, 'Invalid response. Choose y or n.' 
-        READ, saveplot, PROMPT='Save overdensity plot? (y/n)'
-      ENDWHILE
-    ENDIF ELSE IF (saveplot EQ 'n') THEN BEGIN
-      print, 'Overdensity plot not saved.'
-    ENDIF 
-    wdelete, 2 
-  ENDIF   ; user wants to save at least some plots
-    radiusresults_red_cuts[r,*,0] = densities_cuts/field_densities_cuts 
-    radiusresults_red_cuts[r,*,1] = density_errors_cuts/field_densities_cuts
-
-    ; MIDDLE BAND 
-    ; set up vertices of polygon for polyfill
-    ypoints=dblarr(2*nbins)
-    ypoints[0:nbins-1] = field_densities_cuts_mid-field_density_errors_cuts_mid
-    FOR i=0, nbins-1 DO BEGIN
-    ypoints[i+nbins] = field_densities_cuts_mid[nbins-1-i]+field_density_errors_cuts_mid[nbins-1-i]
-    ENDFOR
-    ; make the main plot comparing blob to field with error bars 
-    window, 2, retain=2, xsize=1200, ysize=1000
-    title=("Galaxy Overdensity in Blob Region for " + blobname[blob] + apsnameplot) + ' (with color cuts)'
-    plot, mags, densities_cuts_mid, xtitle="magnitude (F814W)", ytitle="N!Igal!N per deg!E2!N per 0.5 mag", title=title,xthick=2,ythick=2,background=255, color=0, charsize=2., psym=-8, /ylog, yrange=[1d3,1d6], /ystyle, xrange=[22.5,29.5], /xstyle, charthick=2 
-    polyfill, xpoints, ypoints, color=200, clip=[22.5,1d3,29.5,1d6], /data, noclip=0
-    errplot, mags, densities_cuts_mid-density_errors_cuts_mid, densities_cuts_mid+density_errors_cuts_mid, color=0, thick=2
-    oplot, mags, densities_cuts_mid, psym=-8, color=0, thick=2     ; have to do this again because polyfill covers it up 
-    oplot, mags, field_densities_cuts_mid, color=0, linestyle=2, thick=2
-    LEGEND, ['blob','field'], /right, /top, color=0, textcolor=0, linestyle=[0,2], thick=2., charsize=1.5, box=0, number=0.1, charthick=1.5   
-    axis, color=0, xaxis=0, xrange=[22.5,29.5], /xstyle, /data, charsize=2, charthick=2, xtickformat="(A1)", xthick=2
-    axis, color=0, xaxis=1, xrange=[22.5,29.5], /xstyle, /data, charsize=0, xtickformat="(A1)", xthick=2
-    axis, color=0, yaxis=0, /ylog, yrange=[1d3,1d6], /ystyle,  /ynozero, /data, charsize=2, charthick=2, ytickformat="(A1)", ythick=2
-    axis, color=0, yaxis=1, /ylog, yrange=[1d3,1d6], /ystyle,  /ynozero, /data, charsize=0, ytickformat="(A1)", ythick=2
-  IF (saveanyplots EQ 'y') THEN BEGIN 
-    saveplot = ''
-    READ, saveplot, PROMPT='Save overdensity plot? (y/n)'
-    IF (saveplot EQ 'y') THEN BEGIN 
-       namestring = string(blobname[blob]) + '_overdensity' + apsnamesave + '_withcuts_mid.png'
-       write_png, namestring, tvrd(/true) 
-    ENDIF ELSE IF ((saveplot NE 'y') AND (saveplot NE 'n')) THEN BEGIN 
-      WHILE ((saveplot NE 'y') AND (saveplot NE 'n')) DO BEGIN 
-        print, 'Invalid response. Choose y or n.' 
-        READ, saveplot, PROMPT='Save overdensity plot? (y/n)'
-      ENDWHILE
-    ENDIF ELSE IF (saveplot EQ 'n') THEN BEGIN
-      print, 'Overdensity plot not saved.'
-    ENDIF 
-    wdelete, 2
-  ENDIF   ; user wants to save at least some plots
-    radiusresults_mid_cuts[r,*,0] = densities_cuts_mid/field_densities_cuts_mid 
-    radiusresults_mid_cuts[r,*,1] = density_errors_cuts_mid/field_densities_cuts_mid
-
-    ; BLUE BAND 
-    ; set up vertices of polygon for polyfill
-    ypoints=dblarr(2*nbins)
-    ypoints[0:nbins-1] = field_densities_cuts_blue-field_density_errors_cuts_blue
-    FOR i=0, nbins-1 DO BEGIN
-    ypoints[i+nbins] = field_densities_cuts_blue[nbins-1-i]+field_density_errors_cuts_blue[nbins-1-i]
-    ENDFOR
-    ; make the main plot comparing blob to field with error bars 
-    window, 2, retain=2, xsize=1200, ysize=1000
-    title=("Galaxy Overdensity in Blob Region for " + blobname[blob] + apsnameplot) + ' (with color cuts)'
-    plot, mags, densities_cuts_blue, xtitle="magnitude (F475W/F606W)", ytitle="N!Igal!N per deg!E2!N per 0.5 mag", title=title,xthick=2,ythick=2,background=255, color=0, charsize=2., psym=-8, /ylog, yrange=[1d3,1d6], /ystyle, xrange=[22.5,29.5], /xstyle, charthick=2 
-    polyfill, xpoints, ypoints, color=200, clip=[22.5,1d3,29.5,1d6], /data, noclip=0
-    errplot, mags, densities_cuts_blue-density_errors_cuts_blue, densities_cuts_blue+density_errors_cuts_blue, color=0, thick=2
-    oplot, mags, densities_cuts_blue, psym=-8, color=0, thick=2     ; have to do this again because polyfill covers it up 
-    oplot, mags, field_densities_cuts_blue, color=0, linestyle=2, thick=2
-    LEGEND, ['blob','field'], /right, /top, color=0, textcolor=0, linestyle=[0,2], thick=2., charsize=1.5, box=0, number=0.1, charthick=1.5   
-    axis, color=0, xaxis=0, xrange=[22.5,29.5], /xstyle, /data, charsize=2, charthick=2, xtickformat="(A1)", xthick=2
-    axis, color=0, xaxis=1, xrange=[22.5,29.5], /xstyle, /data, charsize=0, xtickformat="(A1)", xthick=2
-    axis, color=0, yaxis=0, /ylog, yrange=[1d3,1d6], /ystyle,  /ynozero, /data, charsize=2, charthick=2, ytickformat="(A1)", ythick=2
-    axis, color=0, yaxis=1, /ylog, yrange=[1d3,1d6], /ystyle,  /ynozero, /data, charsize=0, ytickformat="(A1)", ythick=2
-  IF (saveanyplots EQ 'y') THEN BEGIN 
-    saveplot = ''
-    READ, saveplot, PROMPT='Save overdensity plot? (y/n)'
-    IF (saveplot EQ 'y') THEN BEGIN 
-       namestring = string(blobname[blob]) + '_overdensity' + apsnamesave + '_withcuts_blue.png'
-       write_png, namestring, tvrd(/true) 
-    ENDIF ELSE IF ((saveplot NE 'y') AND (saveplot NE 'n')) THEN BEGIN 
-      WHILE ((saveplot NE 'y') AND (saveplot NE 'n')) DO BEGIN 
-        print, 'Invalid response. Choose y or n.' 
-        READ, saveplot, PROMPT='Save overdensity plot? (y/n)'
-      ENDWHILE
-    ENDIF ELSE IF (saveplot EQ 'n') THEN BEGIN
-      print, 'Overdensity plot not saved.'
-    ENDIF 
-    wdelete, 2
-  ENDIF   ; user wants to save at least some plots
-    radiusresults_blue_cuts[r,*,0] = densities_cuts_blue/field_densities_cuts_blue 
-    radiusresults_blue_cuts[r,*,1] = density_errors_cuts_blue/field_densities_cuts_blue 
-
-
-    ; STATISTICAL LUMINOSITY FUNCTION 
-    ; combine everything from before to make this 
-    xvertices = fltarr(2.0*n_elements(mags) + 2.)
-    yvertices = fltarr(2.0*n_elements(mags) + 2.)
-    xvertices[0] = brightestmag
-    xvertices[-1] = dimmestmag
-    yvertices[0] = 0
-    yvertices[-1] = 0
-    xvertices[1] = brightestmag
-    xvertices[-2] = dimmestmag
-    FOR i=1, n_elements(mags) -1 DO BEGIN
-      xvertices[2*i] = mags[i]-(binsize/2.0)
-      xvertices[2*i+1] = mags[i]-(binsize/2.0)
-    ENDFOR
-    FOR i=1, n_elements(mags) -1 DO BEGIN
-      yvertices[2*i+1] = blob_ngal_binned_cuts[i]
-      yvertices[2*i+2] = blob_ngal_binned_cuts[i]
-    ENDFOR
-    ; now make statistical luminosity function
-    overdensity = densities - field_densities
-    n_overdensity = overdensity * (!dPI*ap_radius[r]^2.)  ; convert to number
-    window, 3, retain=2, xsize=1200, ysize=1000
-    title=("Statistical Luminosity Function for Galaxies in " + blobname[blob] + apsnameplot) 
-    plot, mags, n_overdensity, background=255, color=0, charsize=2, linestyle=2, yrange=[0,10], /ystyle,xrange=[22,30],/xstyle, title=title, xtitle='magnitude (F140W)',ytitle='N!Igal!N'
-    polyfill, xvertices,yvertices, color=220, clip=[22,0,30,10], /data, noclip=0
-    oplot, mags, blob_ngal_binned, color=0, psym=10
-    oplot, mags, blob_ngal_binned_cuts, color=0, psym=10
-    oplot, mags, n_overdensity, color=0, thick=2, linestyle=2
-  IF (saveanyplots EQ 'y') THEN BEGIN 
-    saveplot = ''
-    READ, saveplot, PROMPT='Save statistical luminosity function plot? (y/n)'
-    IF (saveplot EQ 'y') THEN BEGIN 
-       namestring = string(blobname[blob]) + '_statlum' + apsnamesave + '.png'
-       write_png, namestring, tvrd(/true) 
-    ENDIF ELSE IF ((saveplot NE 'y') AND (saveplot NE 'n')) THEN BEGIN 
-      WHILE ((saveplot NE 'y') AND (saveplot NE 'n')) DO BEGIN 
-        print, 'Invalid response. Choose y or n.' 
-        READ, saveplot, PROMPT='Save statistical luminosity function plot? (y/n)'
-      ENDWHILE
-    ENDIF ELSE IF (saveplot EQ 'n') THEN BEGIN
-      print, 'Statistical luminosity function plot not saved.'
-    ENDIF 
-    wdelete, 3
-  ENDIF   ; user wants to save at least some plots
+    ; STATISTICAL LUMINOSITY FUNCTIONS 
+    ; combine everything from before to make these - see statlum procedure header 
+    !P.MULTI = [0,1,3,0,1]
+    window, 1, retain=2, xsize=650, ysize=1200
+    ;
+    ; RED:
+    statlum, mags, binsize, blob_ngal_binned, blob_ngal_binned_cuts, densities, field_densities, ap_radius[r], blobname[blob], nApertures, ap_radius_arcsec[r], redname[blob]  
+      ; namestring = titlemaker('statlum', blobname[blob], nApertures=nApertures, radius=ap_radius_arcsec[r], band=redname[blob], filetype='.png') 
+      ; plotsave, saveanyplots, namestring
+      ;
+    ; MIDDLE: 
+    statlum, mags, binsize, blob_ngal_binned_mid, blob_ngal_binned_cuts_mid, densities_mid, field_densities_mid, ap_radius[r], blobname[blob], nApertures, ap_radius_arcsec[r], midname[blob]  
+      ; namestring = titlemaker('statlum', blobname[blob], nApertures=nApertures, radius=ap_radius_arcsec[r], band=midname[blob], filetype='.png') 
+      ; plotsave, saveanyplots, namestring
+      ;
+    ; BLUE: 
+    statlum, mags, binsize, blob_ngal_binned_blue, blob_ngal_binned_cuts_blue, densities_blue, field_densities_blue, ap_radius[r], blobname[blob], nApertures, ap_radius_arcsec[r], bluename[blob] 
+      ; namestring = titlemaker('statlum', blobname[blob], nApertures=nApertures, radius=ap_radius_arcsec[r], band=bluename[blob], filetype='.png') 
+      ; plotsave, saveanyplots, namestring
+      ;
+    namestring = titlemaker('statlum', blobname[blob], nApertures=nApertures, radius=ap_radius_arcsec[r], filetype='.png') 
+    plotsave, saveanyplots, namestring
 
 
 
-   ; ADD THIS STUFF TO THE HEADER!!!
-  IF (saveanyplots EQ 'y') THEN BEGIN 
-    histquestion = ''
-    READ, histquestion, PROMPT='Make histograms? (y/n)'
-    IF (histquestion EQ 'y') THEN BEGIN 
+   ; ADD EVERYTHING BELOW THIS TO THE HEADER!!!
+
      ; How likely is it to find overdensities in this field anyway? 
-      ap_numbers_corrected = ap_densities*!dPI*ap_radius[r]^2.
-      ap_numbers_corrected_cuts = ap_densities_cuts*!dPI*ap_radius[r]^2.
-      ap_totals = total(ap_numbers_corrected,1)    ; total number of galaxies in each aperture regardless of magnitude
-      ap_totals_cuts = total(ap_numbers_corrected_cuts,1)    ; total number of galaxies in each aperture regardless of magnitude
-      ; compare total numbers (regardless of magnitude) to blob, no cuts
-      window, 4, retain=2, xsize=1200, ysize=1000 
-      plothist, ap_totals, background=255, color=0, title="Number of Galaxies in Apertures, No Cuts", xtitle='n galaxies in aperture', ytitle='number of apertures', axiscolor=0, bin=1,xrange=[0,50], /xstyle
-      blobgaltext = 'blob: ' + string(fix(total(blob_ngal_binned))) + ' total galaxies' 
-      xyouts, 30., nApertures/10., blobgaltext, color=0, charsize=1.5
-      saveplot = ''
-      READ, saveplot, PROMPT='Save this plot? (y/n)'
-      IF (saveplot EQ 'y') THEN BEGIN 
-        namestring = string(blobname[blob]) + '_aphist' + apsnamesave + '.png'
-        write_png, namestring, tvrd(/true) 
-      ENDIF 
-      wdelete, 4
-      ; compare total numbers (regardless of magnitude) to blob WITH cuts
-      window, 5, retain=2, xsize=1200, ysize=1000 
-      plothist, ap_totals_cuts, background=255, color=0, title="Number of Galaxies in Apertures with Cuts", xtitle='n galaxies in aperture', ytitle='number of apertures', axiscolor=0, bin=1,xrange=[0,50], /xstyle
-      blobgaltext = 'blob: ' + string(fix(total(blob_ngal_binned_cuts))) + ' total galaxies' 
-      xyouts, 30., nApertures/10., blobgaltext, color=0, charsize=1.5
-      saveplot = ''
-      READ, saveplot, PROMPT='Save this plot? (y/n)'
-      IF (saveplot EQ 'y') THEN BEGIN 
-        namestring = string(blobname[blob]) + '_aphist' + apsnamesave + '_cuts.png'
-        write_png, namestring, tvrd(/true) 
-      ENDIF 
-      wdelete, 5
-      ; now look within each individual magnitude bin 
-      FOR i=0, nbins-1 DO BEGIN
-        n_in_aps = fltarr(nApertures)
-        n_in_aps[*] = ap_numbers_corrected[i,*]
-        checker = WHERE(n_in_aps NE 0, /null)
-        IF (checker NE !null) THEN BEGIN
-          window, 0, retain=2, xsize=1200, ysize=1000
-          title = 'Galaxy Number Density in Apertures for Galaxies between Magnitudes ' + string(mags[i], format='(F4.1)') + ' and ' + string(mags[i]+binsize, format='(F4.1)') + ' for ' + blobname[blob] + ', no cuts'
-          plothist, n_in_aps, background=255, color=0, xtitle='n galaxies in aperture', ytitle='number of apertures', title=title, axiscolor=0, bin=1, xrange=[0,50], /xstyle
-          blobgaltext = 'blob: ' + string(fix(blob_ngal_binned[i])) + ' galaxies in this bin'
-          xyouts, 30., nApertures/10., blobgaltext, color=0, charsize=1.5
-          saveplot = ''
-          READ, saveplot, PROMPT='Save this plot? (y/n)'
-          IF (saveplot EQ 'y') THEN BEGIN 
-           namestring = string(blobname[blob]) + '_' + string(mags[i], format='(F4.1)') + '_aphist.png'
-           write_png, namestring, tvrd(/true) 
-          ENDIF 
-          wdelete, 0
-        ENDIF ELSE print, "no apertures contain any galaxies with magnitudes between ", string(mags[i], format='(F4.1)'), " and ", string(mags[i]+binsize, format='(F4.1)'), ' without cuts'
-        ; now do the same for the cuts 
-        n_in_aps_cuts = fltarr(nApertures)
-        n_in_aps_cuts[*] = ap_numbers_corrected_cuts[i,*]
-        checker = WHERE(n_in_aps_cuts NE 0, /null)
-        IF (checker NE !null) THEN BEGIN
-          window, 0, retain=2, xsize=1200, ysize=1000
-          title = 'Galaxy Number Density in Apertures for Galaxies between Magnitudes ' + string(mags[i], format='(F4.1)') + ' and ' + string(mags[i]+binsize, format='(F4.1)') + ' for ' + blobname[blob] + ', with cuts'
-          plothist, n_in_aps_cuts, background=255, color=0, xtitle='n galaxies in aperture', ytitle='number of apertures', title=title, axiscolor=0, bin=1, xrange=[0,50], /xstyle
-          blobgaltext = 'blob: ' + string(fix(blob_ngal_binned_cuts[i])) + ' galaxies in this bin'
-          xyouts, 30., nApertures/10., blobgaltext, color=0, charsize=1.5
-          saveplot = ''
-          READ, saveplot, PROMPT='Save this plot? (y/n)'
-          IF (saveplot EQ 'y') THEN BEGIN 
-           namestring = string(blobname[blob]) + '_' + string(mags[i], format='(F4.1)') + '_aphist_cuts.png'
-           write_png, namestring, tvrd(/true) 
-          ENDIF 
-          wdelete, 0
-        ENDIF ELSE print, "no apertures contain any galaxies with magnitudes between ", string(mags[i], format='(F4.1)'), " and ", string(mags[i]+binsize, format='(F4.1)'), ' with cuts'
-      ENDFOR
-      ;ap_ngal_binned = dblarr(nbins,nApertures)   ; contains # galaxies in each aperture in each mag bin
-      ;ap_densities = double(ap_ngal_binned)/(!dPI*ap_radius[r]^2.*ap_area_weight)           ; array of the densities in each aperture in each mag bin
-    ENDIF   ; user wanted to make histograms 
-  ENDIF   ; user wants to save at least some plots
+     ap_numbers_corrected = ap_densities*!dPI*ap_radius[r]^2.
+     ap_numbers_corrected_cuts = ap_densities_cuts*!dPI*ap_radius[r]^2.
+     ap_totals = total(ap_numbers_corrected,1)    ; total number of galaxies in each aperture regardless of magnitude
+     ap_totals_cuts = total(ap_numbers_corrected_cuts,1)    ; total number of galaxies in each aperture regardless of magnitude
 
-
-;  ENDIF   ; if the user wanted to do the field/overdensity stuff
-
- ENDFOR   ; all aperture sizes
-
-
- window, 0, retain=2, xsize=1200, ysize=1000 
- loadct, 39
- indices = findgen(n_radii)
- colors = indices*254./n_radii 
- title = 'Different Radius Sizes'
- xtitle = 'magnitude'
- ytitle = 'overdensity factor'
- plot, mags, radiusresults_red_nocuts[0,*,0], background=255, color=0, title=title+', red band, no cuts', xtitle=xtitle, ytitle=ytitle,yrange=[0,50], /ystyle, charsize=1.5 
- LEGEND, ['aperture radius = 3" ','5"','10"','12"','15"','20"','25"'], /right, /top, color=colors,  linestyle=0, textcolor=0, charsize=1.5, box=0, number=0.5, charthick=1.5   
- errplot, mags, radiusresults_red_nocuts[0,*,0]-radiusresults_red_nocuts[0,*,1], radiusresults_red_nocuts[0,*,0]+radiusresults_red_nocuts[0,*,1], color=0
- FOR r=1, n_radii_indices DO BEGIN
-   oplot, mags, radiusresults_red_nocuts[r,*,0], color = colors[r]
-   errplot, mags, radiusresults_red_nocuts[r,*,0]-radiusresults_red_nocuts[r,*,1], radiusresults_red_nocuts[r,*,0]+radiusresults_red_nocuts[r,*,1], color=colors[r] 
- ENDFOR
- saveplot = ''
- READ, saveplot, PROMPT='Save this plot? (y/n)'
- IF (saveplot EQ 'y') THEN BEGIN 
-   namestring = string(blobname[blob]) + '_radii' + apsnamesave + '_red_nocuts.png'
-   write_png, namestring, tvrd(/true) 
- ENDIF 
- wdelete, 0
-
- window, 0, retain=2, xsize=1200, ysize=1000 
- plot, mags, radiusresults_mid_nocuts[0,*,0], background=255, color=0, title=title+', middle band, no cuts', xtitle=xtitle, ytitle=ytitle,yrange=[0,50], /ystyle, charsize=1.5
- LEGEND, ['aperture radius = 3" ','5"','10"','12"','15"','20"','25"'], /right, /top, color=colors,  linestyle=0, textcolor=0, charsize=1.5, box=0, number=0.5, charthick=1.5   
- errplot, mags, radiusresults_mid_nocuts[0,*,0]-radiusresults_mid_nocuts[0,*,1], radiusresults_mid_nocuts[0,*,0]+radiusresults_mid_nocuts[0,*,1], color=0
- FOR r=1, n_radii_indices DO BEGIN
-   oplot, mags, radiusresults_mid_nocuts[r,*,0], color = colors[r]
-   errplot, mags, radiusresults_mid_nocuts[r,*,0]-radiusresults_mid_nocuts[r,*,1], radiusresults_mid_nocuts[r,*,0]+radiusresults_mid_nocuts[r,*,1], color=colors[r] 
- ENDFOR
- saveplot = ''
- READ, saveplot, PROMPT='Save this plot? (y/n)'
- IF (saveplot EQ 'y') THEN BEGIN 
-   namestring = string(blobname[blob]) + '_radii' + apsnamesave + '_mid_nocuts.png'
-   write_png, namestring, tvrd(/true) 
- ENDIF 
- wdelete, 0
-
- window, 0, retain=2, xsize=1200, ysize=1000 
- plot, mags, radiusresults_blue_nocuts[0,*,0], background=255, color=0, title=title+', blue band, no cuts', xtitle=xtitle, ytitle=ytitle,yrange=[0,50], /ystyle, charsize=1.5
- LEGEND, ['aperture radius = 3" ','5"','10"','12"','15"','20"','25"'], /right, /top, color=colors,  linestyle=0, textcolor=0, charsize=1.5, box=0, number=0.5, charthick=1.5   
- errplot, mags, radiusresults_blue_nocuts[0,*,0]-radiusresults_blue_nocuts[0,*,1], radiusresults_blue_nocuts[0,*,0]+radiusresults_blue_nocuts[0,*,1], color=0
- FOR r=1, n_radii_indices DO BEGIN
-   oplot, mags, radiusresults_blue_nocuts[r,*,0], color = colors[r]
-   errplot, mags, radiusresults_blue_nocuts[r,*,0]-radiusresults_blue_nocuts[r,*,1], radiusresults_blue_nocuts[r,*,0]+radiusresults_blue_nocuts[r,*,1], color=colors[r] 
- ENDFOR
- saveplot = ''
- READ, saveplot, PROMPT='Save this plot? (y/n)'
- IF (saveplot EQ 'y') THEN BEGIN 
-   namestring = string(blobname[blob]) + '_radii' + apsnamesave + '_blue_nocuts.png'
-   write_png, namestring, tvrd(/true) 
- ENDIF 
- wdelete, 0
-
- window, 0, retain=2, xsize=1200, ysize=1000 
- plot, mags, radiusresults_red_cuts[0,*,0], background=255, color=0, title=title+', red band, with cuts', xtitle=xtitle, ytitle=ytitle,yrange=[0,50], /ystyle, charsize=1.5
- LEGEND, ['aperture radius = 3" ','5"','10"','12"','15"','20"','25"'], /right, /top, color=colors, linestyle=0, textcolor=0, charsize=1.5, box=0, number=0.5, charthick=1.5   
- errplot, mags, radiusresults_red_cuts[0,*,0]-radiusresults_red_cuts[0,*,1], radiusresults_red_cuts[0,*,0]+radiusresults_red_cuts[0,*,1], color=0
- FOR r=1, n_radii_indices DO BEGIN
-   oplot, mags, radiusresults_red_cuts[r,*,0], color = colors[r]
-   errplot, mags, radiusresults_red_cuts[r,*,0]-radiusresults_red_cuts[r,*,1], radiusresults_red_cuts[r,*,0]+radiusresults_red_cuts[r,*,1], color=colors[r] 
- ENDFOR
- saveplot = ''
- READ, saveplot, PROMPT='Save this plot? (y/n)'
- IF (saveplot EQ 'y') THEN BEGIN 
-   namestring = string(blobname[blob]) + '_radii' + apsnamesave + '_red_cuts.png'
-   write_png, namestring, tvrd(/true) 
- ENDIF 
- wdelete, 0
-
- window, 0, retain=2, xsize=1200, ysize=1000 
- plot, mags, radiusresults_mid_cuts[0,*,0], background=255, color=0, title=title+', middle band, with cuts', xtitle=xtitle, ytitle=ytitle,yrange=[0,50], /ystyle, charsize=1.5
- LEGEND, ['aperture radius = 3" ','5"','10"','12"','15"','20"','25"'], /right, /top, color=colors,  linestyle=0, textcolor=0, charsize=1.5, box=0, number=0.5, charthick=1.5   
- errplot, mags, radiusresults_mid_cuts[0,*,0]-radiusresults_mid_cuts[0,*,1], radiusresults_mid_cuts[0,*,0]+radiusresults_mid_cuts[0,*,1], color=0
- FOR r=1, n_radii_indices DO BEGIN
-   oplot, mags, radiusresults_mid_cuts[r,*,0], color = colors[r]
-   errplot, mags, radiusresults_mid_cuts[r,*,0]-radiusresults_mid_cuts[r,*,1], radiusresults_mid_cuts[r,*,0]+radiusresults_mid_cuts[r,*,1], color=colors[r] 
- ENDFOR
- saveplot = ''
- READ, saveplot, PROMPT='Save this plot? (y/n)'
- IF (saveplot EQ 'y') THEN BEGIN 
-   namestring = string(blobname[blob]) + '_radii' + apsnamesave + '_mid_cuts.png'
-   write_png, namestring, tvrd(/true) 
- ENDIF 
- wdelete, 0
-
- window, 0, retain=2, xsize=1200, ysize=1000 
- plot, mags, radiusresults_blue_cuts[0,*,0], background=255, color=0, title=title+', blue band, with cuts', xtitle=xtitle, ytitle=ytitle,yrange=[0,50], /ystyle, charsize=1.5
- LEGEND, ['aperture radius = 3" ','5"','10"','12"','15"','20"','25"'], /right, /top, color=colors,  linestyle=0, textcolor=0, charsize=1.5, box=0, number=0.5, charthick=1.5   
- errplot, mags, radiusresults_blue_cuts[0,*,0]-radiusresults_blue_cuts[0,*,1], radiusresults_blue_cuts[0,*,0]+radiusresults_blue_cuts[0,*,1], color=0
- FOR r=1, n_radii_indices DO BEGIN
-   oplot, mags, radiusresults_blue_cuts[r,*,0], color = colors[r]
-   errplot, mags, radiusresults_blue_cuts[r,*,0]-radiusresults_blue_cuts[r,*,1], radiusresults_blue_cuts[r,*,0]+radiusresults_blue_cuts[r,*,1], color=colors[r] 
- ENDFOR
- saveplot = ''
- READ, saveplot, PROMPT='Save this plot? (y/n)'
- IF (saveplot EQ 'y') THEN BEGIN 
-   namestring = string(blobname[blob]) + '_radii' + apsnamesave + '_blue_cuts.png'
-   write_png, namestring, tvrd(/true) 
- ENDIF 
- wdelete, 0
-
- window, 1, retain=2, xsize=1200, ysize=1000
- plot, ap_radius_arcsec, radiusresults_red_cuts[*, 6,0], background=255, color=0, xtitle='aperture radius (arcseconds)', ytitle='overdensity factor', title='Overdensity for Different Radii, red band, with cuts, magnitudes 25-25.5', charsize=1.5, xrange=[0,30], /xstyle
- errplot, ap_radius_arcsec, radiusresults_red_cuts[*, 6,0]-radiusresults_red_cuts[*, 6,1],radiusresults_red_cuts[*, 6,0]+radiusresults_red_cuts[*, 6,1], color=0
- saveplot = ''
- READ, saveplot, PROMPT='Save this plot? (y/n)'
- IF (saveplot EQ 'y') THEN BEGIN 
-   namestring = string(blobname[blob]) + '_radii_mag25' + apsnamesave + '_red_cuts.png'
-   write_png, namestring, tvrd(/true) 
- ENDIF 
-
-ENDFOR ;all the blobs
+     !P.MULTI = [0,2,1,0,1]
+     window, 1, retain=2, xsize=1200, ysize=400
+     ; compare total numbers (regardless of magnitude) to blob, no cuts
+     makehist, ap_totals, total(blob_ngal_binned), blobname[blob], nApertures, ap_radius_arcsec[r], 'n'  
+     ; namestring = titlemaker('aphist', blobname[blob], nApertures=nApertures, radius=ap_radius_arcsec[r], cuts='n', filetype='.png)
+     ; plotsave, saveanyplots, namestring
+     ;
+     ; compare total numbers (regardless of magnitude) to blob WITH cuts
+     makehist, ap_totals_cuts, total(blob_ngal_binned_cuts), blobname[blob], nApertures, ap_radius_arcsec[r], 'y'  
+     ; namestring = titlemaker('aphist', blobname[blob], nApertures=nApertures, radius=ap_radius_arcsec[r], cuts='y', filetype='.png)
+     ; plotsave, saveanyplots, namestring
+     ; 
+     namestring = titlemaker('aphist', blobname[blob], nApertures=nApertures, radius=ap_radius_arcsec[r], filetype='.png')
+     plotsave, saveanyplots, namestring
 
 
 
+
+; ; fix this shit
+;  IF (saveanyplots EQ 'y') THEN BEGIN 
+;    histquestion = ''
+;    READ, histquestion, PROMPT='Make histograms? (y/n)'
+;    IF (histquestion EQ 'y') THEN BEGIN 
+;      ; now look within each individual magnitude bin 
+;      FOR i=0, nbins-1 DO BEGIN
+;        n_in_aps = fltarr(nApertures)
+;        n_in_aps[*] = ap_numbers_corrected[i,*]
+;        checker = WHERE(n_in_aps NE 0, /null)
+;        IF (checker NE !null) THEN BEGIN
+;          window, 0, retain=2, xsize=1200, ysize=1000
+;          title = 'Galaxy Number Density in Apertures for Galaxies between Magnitudes ' + string(mags[i], format='(F4.1)') + ' and ' + string(mags[i]+binsize, format='(F4.1)') + ' for ' + blobname[blob] + ', no cuts'
+;          plothist, n_in_aps, background=255, color=0, xtitle='n galaxies in aperture', ytitle='number of apertures', title=title, axiscolor=0, bin=1, xrange=[0,50], /xstyle
+;          blobgaltext = 'blob: ' + string(fix(blob_ngal_binned[i])) + ' galaxies in this bin'
+;          xyouts, 30., nApertures/10., blobgaltext, color=0, charsize=1.5
+;          saveplot = ''
+;          READ, saveplot, PROMPT='Save this plot? (y/n)'
+;          IF (saveplot EQ 'y') THEN BEGIN 
+;           namestring = string(blobname[blob]) + '_' + apsnamesave + '_' + ap_radius_strings[r] + string(mags[i], format='(F4.1)') + '_aphist.png'
+;           write_png, namestring, tvrd(/true) 
+;          ENDIF 
+;          wdelete, 0
+;        ENDIF ELSE print, "no apertures contain any galaxies with magnitudes between ", string(mags[i], format='(F4.1)'), " and ", string(mags[i]+binsize, format='(F4.1)'), ' without cuts'
+;        ; now do the same for the cuts 
+;        n_in_aps_cuts = fltarr(nApertures)
+;        n_in_aps_cuts[*] = ap_numbers_corrected_cuts[i,*]
+;        checker = WHERE(n_in_aps_cuts NE 0, /null)
+;        IF (checker NE !null) THEN BEGIN
+;          window, 0, retain=2, xsize=1200, ysize=1000
+;          title = 'Galaxy Number Density in Apertures for Galaxies between Magnitudes ' + string(mags[i], format='(F4.1)') + ' and ' + string(mags[i]+binsize, format='(F4.1)') + ' for ' + blobname[blob] + ', with cuts'
+;          plothist, n_in_aps_cuts, background=255, color=0, xtitle='n galaxies in aperture', ytitle='number of apertures', title=title, axiscolor=0, bin=1, xrange=[0,50], /xstyle
+;          blobgaltext = 'blob: ' + string(fix(blob_ngal_binned_cuts[i])) + ' galaxies in this bin'
+;          xyouts, 30., nApertures/10., blobgaltext, color=0, charsize=1.5
+;          saveplot = ''
+;          READ, saveplot, PROMPT='Save this plot? (y/n)'
+;          IF (saveplot EQ 'y') THEN BEGIN 
+;           namestring = string(blobname[blob]) + '_' + apsnamesave + '_' + ap_radius_strings[r] + string(mags[i], format='(F4.1)') + '_aphist_cuts.png'
+;           write_png, namestring, tvrd(/true) 
+;          ENDIF 
+;          wdelete, 0
+;        ENDIF ELSE print, "no apertures contain any galaxies with magnitudes between ", string(mags[i], format='(F4.1)'), " and ", string(mags[i]+binsize, format='(F4.1)'), ' with cuts'
+;      ENDFOR
+;    ENDIF   ; user wanted to make histograms 
+;  ENDIF   ; user wants to save at least some plots
+;; end of shit that needs fixing
+
+
+
+   ENDFOR   ; all aperture sizes
+
+
+   ; if there were multiple aperture radii being tested, analyze them with plots:  
+   IF (n_radii GT 1.) THEN BEGIN 
+     ;
+     ; now make plots of the results of the aperture size analysis: overdensity factor vs magnitude for each band for each radius size 
+     loadct, 39    ; new color table 
+     !P.MULTI = [0,2,3,0,1]
+     window, 1, retain=2, xsize=950, ysize=1200
+     ; RED BAND, NO CUTS
+     Rmultirad, ap_radius_arcsec, mags, radiusresults_red_nocuts, blobname[blob], nApertures, redname[blob], 'n'
+        ; namestring = titlemaker('Rmultirad', blobname[blob], nApertures=nApertures, band=redname[blob], cuts='n', filetype='.png')
+        ; plotsave, saveanyplots, namestring
+     ; MIDDLE BAND, NO CUTS
+     Rmultirad, ap_radius_arcsec, mags, radiusresults_mid_nocuts, blobname[blob], nApertures, midname[blob], 'n' 
+        ; namestring = titlemaker('Rmultirad', blobname[blob], nApertures=nApertures, band=midname[blob], cuts='n', filetype='.png')
+        ; plotsave, saveanyplots, namestring
+     ; BLUE BAND, NO CUTS
+     Rmultirad, ap_radius_arcsec, mags, radiusresults_blue_nocuts, blobname[blob], nApertures, bluename[blob], 'n' 
+        ; namestring = titlemaker('Rmultirad', blobname[blob], nApertures=nApertures, band=bluename[blob], cuts='n', filetype='.png')
+        ; plotsave, saveanyplots, namestring
+     ; RED BAND WITH CUTS
+     Rmultirad, ap_radius_arcsec, mags, radiusresults_red_cuts, blobname[blob], nApertures, redname[blob], 'y' 
+        ; namestring = titlemaker('Rmultirad', blobname[blob], nApertures=nApertures, band=redname[blob], cuts='y', filetype='.png')
+        ; plotsave, saveanyplots, namestring
+     ; MIDDLE BAND WITH CUTS
+     Rmultirad, ap_radius_arcsec, mags, radiusresults_mid_cuts, blobname[blob], nApertures, midname[blob], 'y' 
+        ; namestring = titlemaker('Rmultirad', blobname[blob], nApertures=nApertures, band=midname[blob], cuts='y', filetype='.png')
+        ; plotsave, saveanyplots, namestring
+     ; BLUE BAND WITH CUTS
+     Rmultirad, ap_radius_arcsec, mags, radiusresults_blue_cuts, blobname[blob], nApertures, bluename[blob], 'y' 
+        ; namestring = titlemaker('Rmultirad', blobname[blob], nApertures=nApertures, band=bluename[blob], cuts='y', filetype='.png')
+        ; plotsave, saveanyplots, namestring
+     namestring = titlemaker('Rmultirad', blobname[blob], nApertures=nApertures, filetype='.png')
+     plotsave, saveanyplots, namestring
+     ;
+     ; more plots of the results of the aperture size analysis: overdensity factor vs aperture radius for each band for each mag bin 
+     window, 0, retain=2, xsize=950, ysize=1200
+     ; RED BAND, NO CUTS
+     Rmultimag, mags, ap_radius_arcsec, radiusresults_red_nocuts, blobname[blob], nApertures, redname[blob], 'n' 
+        ; namestring = titlemaker('Rmultimag', blobname[blob], nApertures=nApertures, band=redname[blob], cuts='n', filetype='.png')
+        ; plotsave, saveanyplots, namestring
+     ; MIDDLE BAND, NO CUTS
+     Rmultimag, mags, ap_radius_arcsec, radiusresults_mid_nocuts, blobname[blob], nApertures, midname[blob], 'n' 
+        ; namestring = titlemaker('Rmultimag', blobname[blob], nApertures=nApertures, band=midname[blob], cuts='n', filetype='.png')
+        ; plotsave, saveanyplots, namestring
+     ; BLUE BAND, NO CUTS
+     Rmultimag, mags, ap_radius_arcsec, radiusresults_blue_nocuts, blobname[blob], nApertures, bluename[blob], 'n' 
+        ; namestring = titlemaker('Rmultimag', blobname[blob], nApertures=nApertures, band=bluename[blob], cuts='n', filetype='.png')
+        ; plotsave, saveanyplots, namestring
+     ; RED BAND WITH CUTS
+     Rmultimag, mags, ap_radius_arcsec, radiusresults_red_cuts, blobname[blob], nApertures, redname[blob], 'y' 
+        ; namestring = titlemaker('Rmultimag', blobname[blob], nApertures=nApertures, band=redname[blob], cuts='y', filetype='.png')
+        ; plotsave, saveanyplots, namestring
+     ; MIDDLE BAND WITH CUTS
+     Rmultimag, mags, ap_radius_arcsec, radiusresults_mid_cuts, blobname[blob], nApertures, midname[blob], 'y' 
+        ; namestring = titlemaker('Rmultimag', blobname[blob], nApertures=nApertures, band=midname[blob], cuts='y', filetype='.png')
+        ; plotsave, saveanyplots, namestring
+     ; BLUE BAND WITH CUTS
+     Rmultimag, mags, ap_radius_arcsec, radiusresults_blue_cuts, blobname[blob], nApertures, bluename[blob], 'y' 
+        ; namestring = titlemaker('Rmultimag', blobname[blob], nApertures=nApertures, band=bluename[blob], cuts='y', filetype='.png')
+        ; plotsave, saveanyplots, namestring
+     namestring = titlemaker('Rmultimag', blobname[blob], nApertures=nApertures, filetype='.png')
+     plotsave, saveanyplots, namestring
+     ;
+   ENDIF     ; there are multiple aperture radii being tested 
+
+
+ ENDFOR ;all the blobs
+
+
+END             ; end of density procedure 
+
+
+
+
+
+
+
+
+
+PRO densityplot, nbins, mags, field_densities, field_density_errors, densities, density_errors, blobname, nApertures, radius, band, cuts
+;-------------------------------------------------------------------------------------------------------------------------------------------------
+; densityplot procedure
+;   Makes plots of blob and field densities as a function of magnitude.
+; INPUTS: blobname - name of blob whose density is being plotted (for plot title) 
+;         nbins - number of magnitude bins being plotted on the x-axis 
+;         mags - array of magnitudes (data for the x-axis) 
+;         field_densities - array of field density measurements (data for the y-axis) 
+;         field_density_errors - array of errors on field density measurements (to be overplotted as a swath on top of field_densities) 
+;         densities - array of blob density measurements (also data for the y-axis) 
+;         density_errors - array of errors on blob density measurements (to be overplotted on top of densities using errplot) 
+;         apsnameplot - a string showing the number of random apertures used in the analysis (for plot title) 
+;         xtitle - a string containing the label for the x-axis of the plot 
+;         cuts - a string, 'y' or 'n', showing whether the densities used are for raw data or post-color-cut data (for plot title) 
+;-------------------------------------------------------------------------------------------------------------------------------------------------
+ FORWARD_FUNCTION titlemaker           ; this function is used in this procedure
+ ; set up vertices of polygon for polyfill
+   xpoints = dblarr(2*nbins)
+   xpoints[0:nbins-1] = mags
+   FOR i=0, nbins-1 DO BEGIN
+     xpoints[i+nbins] = mags[nbins-1-i]
+   ENDFOR 
+   ; y is specific to each catalog (band) 
+   ypoints=dblarr(2*nbins)
+   ypoints[0:nbins-1] = field_densities-field_density_errors
+   FOR i=0, nbins-1 DO BEGIN
+     ypoints[i+nbins] = field_densities[nbins-1-i]+field_density_errors[nbins-1-i]
+   ENDFOR
+ ; make the main plot comparing blob to field with error bars 
+   ; set up titles for plot and axes
+      plottitle = titlemaker('overdensity', blobname, nApertures=nApertures, radius=radius, band=band, cuts=cuts)
+      xtitle = 'magnitude (' + band + ')'
+      ytitle='N!Igal!N per deg!E2!N per 0.5 mag'
+   plot, mags, densities, background=255, color=0, title=plottitle, xtitle=xtitle, ytitle=ytitle, psym=-8, /ylog, yrange=[1d3,1d6],/ystyle, xrange=[22.5,29.5],/xstyle, charsize=2., xthick=2, ythick=2, xmargin=[10,7], ymargin=[6,6] 
+   polyfill, xpoints, ypoints, color=200, clip=[22.5,1d3,29.5,1d6], /data, noclip=0
+   errplot, mags, densities-density_errors, densities+density_errors, color=0, thick=2
+   oplot, mags, densities, psym=-8, color=0, thick=2     ; have to do this again because polyfill covers it up 
+   oplot, mags, field_densities, color=0, linestyle=2, thick=2
+   LEGEND, ['blob','field'], /right, /top, color=0, textcolor=0, linestyle=[0,2], thick=2., charsize=1, /box, outline_color=0.,number=0.1, charthick=1.5   
+   axis, color=0, xaxis=0, xrange=[22.5,29.5], /xstyle, /data, charsize=2, charthick=2, xtickformat="(A1)", xthick=2
+   axis, color=0, xaxis=1, xrange=[22.5,29.5], /xstyle, /data, charsize=0, xtickformat="(A1)", xthick=2
+   axis, color=0, yaxis=0, /ylog, yrange=[1d3,1d6], /ystyle,  /ynozero, /data, charsize=2, charthick=2, ytickformat="(A1)", ythick=2
+   axis, color=0, yaxis=1, /ylog, yrange=[1d3,1d6], /ystyle,  /ynozero, /data, charsize=0, ytickformat="(A1)", ythick=2 
+END 
+
+
+
+
+
+
+
+
+ 
+PRO statlum, mags, binsize, blob_ngal_binned, blob_ngal_binned_cuts, densities, field_densities, ap_radius, blobname, nApertures, ap_radius_arcsec, band   
+;-------------------------------------------------------------------------------------------------------------------------------------------------
+; statlum procedure
+;   description 
+; INPUTS: etc
+;         etc   
+;         saveanyplots - a string, 'y' or 'n', determining if the user should be asked whether or not to save this plot 
+;         namestring - a string containing the name of the file containing the plot if the user chooses to save it 
+; NOTE: Uses plotsave procedure. 
+;-------------------------------------------------------------------------------------------------------------------------------------------------
+ FORWARD_FUNCTION titlemaker           ; this function is used in this procedure
+ ; define the statistical luminosity function
+    overdensity = densities - field_densities
+    n_overdensity = overdensity * (!dPI*ap_radius^2.)  ; convert to number 
+ ; set up vertices of shaded area 
+   xvertices = fltarr(2.0*n_elements(mags) + 2.)
+   yvertices = fltarr(2.0*n_elements(mags) + 2.)
+   xvertices[0] = mags[0]
+   xvertices[-1] = mags[-1]
+   yvertices[0] = 0
+   yvertices[-1] = 0
+   xvertices[1] = mags[0]
+   xvertices[-2] = mags[-1]
+   FOR i=1, n_elements(mags) -1 DO BEGIN
+     xvertices[2*i] = mags[i]-(binsize/2.0)
+     xvertices[2*i+1] = mags[i]-(binsize/2.0)
+   ENDFOR
+   FOR i=1, n_elements(mags) -1 DO BEGIN
+     yvertices[2*i+1] = blob_ngal_binned_cuts[i]
+     yvertices[2*i+2] = blob_ngal_binned_cuts[i]
+   ENDFOR
+ ; now plot statistical luminosity function
+   ; set up titles for plot and axes
+      title = titlemaker('statlum', blobname, nApertures=nApertures, radius=ap_radius_arcsec, band=band) 
+      xtitle = 'magnitude (' + band + ')'
+      ytitle = 'N!Igal!N'
+   plot, mags, n_overdensity, background=255, color=0, title=title, xtitle=xtitle, ytitle=ytitle, linestyle=2, yrange=[0,10],/ystyle, xrange=[22,30],/xstyle, charsize=3, thick=2, xmargin=[10,7], ymargin=[4,4]
+   polyfill, xvertices,yvertices, color=220, clip=[22,0,30,10], /data, noclip=0
+   oplot, mags, blob_ngal_binned, color=0, psym=10, thick=2
+   oplot, mags, blob_ngal_binned_cuts, color=0, psym=10, thick=2
+   oplot, mags, n_overdensity, color=0, thick=2, linestyle=2
+END 
+
+
+
+
+
+
+
+
+
+PRO makehist, ap_totals, blob_ngal, blobname, nApertures, radius, cuts     ; maybe put optional band keyword in here or mag keyword or smth
+;-------------------------------------------------------------------------------------------------------------------------------------------------
+; makehist procedure
+;   description 
+; INPUTS: etc
+;         etc   
+;-------------------------------------------------------------------------------------------------------------------------------------------------
+ FORWARD_FUNCTION titlemaker           ; this function is used in this procedure
+ ; set up titles for plot and axes
+    title = titlemaker('aphist', blobname, nApertures=nApertures, radius=radius, cuts=cuts) 
+    xtitle = 'n galaxies in aperture'
+    ytitle='number of apertures'
+ plothist, ap_totals, background=255, color=0, axiscolor=0, title=title, xtitle=xtitle, ytitle=ytitle, bin=1, xrange=[0,blob_ngal+10.],/xstyle, charsize=1.5, thick=2, ymargin=[4,4]
+ oplot, [blob_ngal, blob_ngal], [0., nApertures], linestyle=2, thick=2, color=0.
+ LEGEND, ['blob','field'], /center, /top, color=0, textcolor=0, linestyle=[0,2], thick=2., charsize=1, /box, outline_color=0.,number=0.1, charthick=1.5
+; xyouts, blob_ngal+1., nApertures/10., blobgaltext, color=0, charsize=1.5
 END
 
 
 
 
 
+
+
+
+
+PRO Rmultirad, ap_radius_arcsec, mags, radiusresults, blobname, nApertures, band, cuts 
+;-------------------------------------------------------------------------------------------------------------------------------------------------
+; Rmultirad procedure
+;   description 
+; INPUTS: etc
+;         etc   
+;-------------------------------------------------------------------------------------------------------------------------------------------------
+ FORWARD_FUNCTION titlemaker           ; this function is used in this procedure
+ ; set up an array of colors to plot each radius in 
+   n_radii = n_elements(ap_radius_arcsec)
+   indices = findgen(n_radii)
+   colors = indices*254./n_radii 
+ ; now make the plot 
+   ; set up titles for plot and axes
+      title = titlemaker('Rmultirad', blobname, nApertures=nApertures, band=band, cuts=cuts)
+      xtitle = 'magnitude (' + band + ')'
+      ytitle = 'overdensity factor'
+   plot, mags, radiusresults[0,*,0], background=255, color=0, title=title, xtitle=xtitle, ytitle=ytitle, yrange=[0,50],/ystyle, charsize=2, thick=2, ymargin=[4,4] 
+   errplot, mags, radiusresults[0,*,0]-radiusresults[0,*,1], radiusresults[0,*,0]+radiusresults[0,*,1], color=0, thick=2
+   FOR r=1, n_radii-1. DO BEGIN
+     oplot, mags, radiusresults[r,*,0], color = colors[r], thick=2
+     errplot, mags, radiusresults[r,*,0]-radiusresults[r,*,1], radiusresults[r,*,0]+radiusresults[r,*,1], color=colors[r], thick=2 
+   ENDFOR
+   LEGEND, strcompress(string(fix(ap_radius_arcsec)), /remove), /right, /top, color=colors, linestyle=0, textcolor=0, charsize=1, /box, outline_color=0., number=0.5, charthick=1.5, thick=2
+END 
+
+
+
+
+
+
+
+
+
+PRO Rmultimag, mags, ap_radius_arcsec, radiusresults, blobname, nApertures, band, cuts 
+;-------------------------------------------------------------------------------------------------------------------------------------------------
+; Rmultimag procedure
+;   description 
+; INPUTS: etc
+;         etc   
+;-------------------------------------------------------------------------------------------------------------------------------------------------
+ FORWARD_FUNCTION titlemaker           ; this function is used in this procedure
+ ; set up an array of colors to plot each magnitude bin in 
+   indices = findgen(n_elements(mags))
+   colors = indices*254./float(n_elements(mags)) 
+ ; now make the plot 
+   ; set up titles for plot and axes 
+      title = titlemaker('Rmultimag', blobname, nApertures=nApertures, band=band, cuts=cuts) 
+      xtitle='aperture radius (arcseconds)'
+      ytitle='overdensity factor'
+   ; set up an empty plot (needs to have no data in case the first thing plotted is NaN): 
+   plot, ap_radius_arcsec, radiusresults[*,1,0], background=255, color=colors[1], title=title, xtitle=xtitle, ytitle=ytitle, xrange=[0,30],/xstyle, yrange=[0,100],/ystyle, charsize=2, ymargin=[4,4], /nodata 
+   ; now add data on top of the empty plot:  
+   FOR i=0, n_elements(mags)-1 DO BEGIN     ; need to make sure that NaNs are thrown out (because where field density is 0, we divided by 0)
+     y = radiusresults[*,i,0] 
+     yerr = radiusresults[*,i,1] 
+     keep = WHERE(finite(y) EQ 1, nkeep)
+     IF (nkeep GT 0) THEN BEGIN
+       oplot, ap_radius_arcsec(keep), y(keep), color=colors[i], thick=2
+       errplot, ap_radius_arcsec(keep), y(keep)-yerr(keep), y(keep)+yerr(keep), color=colors[i], thick=2
+     ENDIF
+   ENDFOR
+   ; add a legend: 
+   LEGEND, strcompress(string(fix(mags)), /remove), /right, /top, color=colors, linestyle=0, textcolor=0, charsize=1, /box, outline_color=0., number=0.5, charthick=1.5, thick=2
+END
+
+
+
+
+
+
+
+
+
+PRO plotsave, saveanyplots, namestring 
+;-------------------------------------------------------------------------------------------------------------------------------------------------
+; plotsave procedure
+;   Asks user whether or not to save a plot and saves said plot if the user chooses to do so. 
+; INPUTS: saveanyplots - a string, 'y' or 'n', determining if the user should be asked whether or not to save this plot at all (code will only
+;                          run if this is set to 'y')  
+;         namestring - a string containing the name of the file containing the plot if the user chooses to save it 
+;-------------------------------------------------------------------------------------------------------------------------------------------------
+  IF (saveanyplots EQ 'y') THEN BEGIN 
+    saveplot = ''
+    READ, saveplot, PROMPT='Save plot? (y/n)'
+    IF (saveplot EQ 'y') THEN BEGIN 
+       write_png, namestring, tvrd(/true) 
+    ENDIF ELSE IF ((saveplot NE 'y') AND (saveplot NE 'n')) THEN BEGIN 
+      WHILE ((saveplot NE 'y') AND (saveplot NE 'n')) DO BEGIN 
+        print, 'Invalid response. Choose y or n.' 
+        READ, saveplot, PROMPT='Save plot? (y/n)'
+      ENDWHILE
+    ENDIF ELSE IF (saveplot EQ 'n') THEN BEGIN
+      print, 'Plot not saved.'
+    ENDIF 
+  ENDIF   ; user wants to save at least some plots
+END 
+
+
+
+
+
+
+
+
+
+FUNCTION titlemaker, plotname, blobname, nApertures=nApertures, radius=radius, band=band, cuts=cuts, filetype=filetype
+;-------------------------------------------------------------------------------------------------------------------------------------------------
+; titlemaker function
+;   description 
+; INPUTS: plotname - string containing the name of the kind of plot being made (ie, "overdensity," "color-color," etc)
+;         blobname - string
+;         nApertures - float
+;         plotname - string containing the name of the kind of plot being made (ie, "overdensity," "color-color," etc)   
+;         radius - float
+;         band - string (F140W, F606W, etc) 
+;         cuts - string/keyword  
+;         filetype - specifies that this is going to be a filename if set; string that gives extension of the file 
+;-------------------------------------------------------------------------------------------------------------------------------------------------
+  ; first, make checks that see if the optional keywords are provided
+  apcheck = n_elements(nApertures)       
+  radcheck = n_elements(radius)
+  bandcheck = n_elements(band)
+  cutscheck = n_elements(cuts)
+  filecheck = n_elements(filetype) 
+
+  ; next make empty strings set up for each element of a title 
+  apsName = ''                           
+  radName = ''
+  bandName = ''
+  cutsName = ''
+  titleName = '' 
+
+  ; now make the final string that will eventually be returned
+  titlestring = ''                    
+
+  ; since the cuts keyword can only be 'y' or 'n', if it's set, make sure it's one of those things 
+  IF (cutscheck NE 0) THEN BEGIN 
+    IF ( (cuts NE 'y') AND (cuts NE 'n') ) THEN BEGIN
+      WHILE ( (cuts NE 'y') AND (cuts NE 'n') ) DO BEGIN        ; make sure the keyword is valid
+        print, 'Invalid cut keyword provided. Choose "y" or "n" only.'
+        cuts = ''
+        READ, cuts, PROMPT='Color cuts?' 
+      ENDWHILE
+    ENDIF ; cuts was set to something other than y or n
+  ENDIF   ; the cuts keyword was provided at all
+
+  ; now, determine whether to make a plot title or a file name:  
+
+  IF (filecheck NE 0) THEN BEGIN            ; if the user wants a filename 
+    ;
+    titlestring = string(plotname) + '_' + string(blobname) 
+    ; now tack on any extra keywords one by one
+    ;
+    ; start with nApertures
+    IF (apcheck NE 0) THEN BEGIN 
+      apsName = strcompress(string(fix(nApertures)), /remove) + 'aps'
+      titlestring = titlestring + '_' + string(apsName) 
+    ENDIF 
+    ;
+    ; radius
+    IF (radcheck NE 0) THEN BEGIN 
+      radName = strcompress(string(fix(radius)), /remove) + 'arcsec'
+      titlestring = titlestring + '_' + string(radName)  
+    ENDIF 
+    ;
+    ; band
+    IF (bandcheck NE 0) THEN BEGIN 
+      bandName = band
+      titlestring = titlestring + '_' + string(bandName)  
+    ENDIF 
+    ;
+    ; cuts 
+    IF (cutscheck NE 0) THEN BEGIN 
+      IF (cuts EQ 'y') THEN BEGIN        ; make a string for the case that there are color cuts 
+        cutsName = 'cuts' 
+      ENDIF ELSE IF (cuts EQ 'n') THEN BEGIN        ; make a string for data without cuts 
+        cutsName = 'raw'
+      ENDIF         ; now we've sorted out what string to use to describe the cuts keyword
+     titlestring = titlestring + '_' + string(cutsName) 
+    ENDIF 
+    ;
+    ; finally, add the file extension to the end of the string 
+    titlestring = titlestring + string(filetype) 
+    ; now we have a valid file name 
+
+  ENDIF ELSE IF (filecheck EQ 0) THEN BEGIN         ; if the user is making a title for a plot 
+    ;
+    ; generate a basic plot title based on what's being plotted 
+    IF (plotname EQ 'colors') THEN titleName = 'Color-Color Diagram for ' 
+    IF (plotname EQ 'overdensity') THEN titleName = 'Galaxy Overdensity in Blob Region for '
+    IF (plotname EQ 'statlum') THEN titleName = 'Statistical Luminosity Function for Galaxies in '
+    IF (plotname EQ 'aphist') THEN titleName = 'Number of Galaxies in Apertures for '
+    IF (plotname EQ 'Rmultirad') THEN titleName = 'Galaxy Overdensity in Different Radii for '
+    IF (plotname EQ 'Rmultimag') THEN titleName = 'Dependence of Overdensity Factor on Aperture Radius for '
+    titlestring = string(titleName) + string(blobname) 
+    ;
+    ; Now, if there are any keywords, add things to the basic plot title: 
+    ;
+    IF ( (apcheck NE 0) OR (radcheck NE 0) OR (bandcheck NE 0) OR (cutscheck NE 0) ) THEN BEGIN
+      ; add a comma and a line after the main title, since this is extra stuff 
+      titlestring = titlestring + ',!C'
+      titlestring = string(titlestring) 
+      ;
+      ; First, see if nApertures and/or radius are specified. Since they go hand-in-hand, treat them together: 
+      IF (radcheck NE 0) THEN radName = strcompress(string(fix(radius)), /remove) + '"'     ; if radius is provided, here's a string describing it 
+      IF (apcheck NE 0) THEN BEGIN            ; if nApertures is provided 
+        apsName = strcompress(string(fix(nApertures)), /remove) + ' apertures'    ; string describing nApertures
+        IF (radcheck NE 0) THEN BEGIN        ; if nApertures and radius are both provided
+          titlestring = titlestring + string(apsName) + ' with ' + string(radName) + ' radii'   
+        ENDIF ELSE IF (radcheck EQ 0) THEN BEGIN            ; if nApertures is provided but not radius
+          titlestring = titlestring + string(apsName)  
+        ENDIF
+      ENDIF ELSE IF ( (apscheck EQ 0) AND (radcheck NE 0) ) THEN BEGIN     ; if nApertures is not provided but radius is 
+        titlestring = titlestring + 'aperture radius of ' + string(radName)       
+      ENDIF         ; if neither nApertures nor radius are provided, nothing else is added to the title string yet 
+      ;
+      ; now tack on the name of the band if that has been provided
+      IF (bandcheck NE 0) THEN BEGIN 
+        bandName = string(band) 
+        IF ( (apcheck NE 0) OR (radcheck NE 0) ) THEN BEGIN     ; if anything else is provided before band, add a comma
+          titlestring = titlestring + ', ' 
+        ENDIF
+        titlestring = titlestring + string(bandName)  
+      ENDIF    ; the band is provided 
+      ;
+      ; now add info about color cuts if that has been provided 
+      IF (cutscheck NE 0) THEN BEGIN     
+        IF (cuts EQ 'y') THEN BEGIN        ; make a string for the case that there are color cuts 
+          cutsName = 'with color cuts' 
+        ENDIF ELSE IF (cuts EQ 'n') THEN BEGIN        ; make a string for data without cuts 
+          cutsName = 'raw (no cuts)'
+        ENDIF         ; sorts out what string to use to describe the cuts keyword
+        ; now that the string is set up, add it to the title 
+        IF ( (apcheck NE 0) OR (radcheck NE 0) OR (bandcheck NE 0) ) THEN BEGIN 
+          titlestring = titlestring + ', '         ; add a comma if anything comes before the cuts text
+        ENDIF 
+        titlestring = string(titlestring) + string(cutsName)       ; tack on the cuts text 
+      ENDIF      ; the cuts keyword is provided 
+      ;
+    ENDIF     ; there are any keywords specified at all
+    ;
+  ENDIF    ; this is the title for a plot 
+
+  
+  RETURN, string(titlestring)       ; provide the final title for the plot or file 
+
+END 
 
 
 
@@ -1116,6 +1207,11 @@ END
 
 
 
+
+
+
+
+
 FUNCTION get_galaxies_noblob, ra, dec, radius, data
 ;-------------------------------------------------------------------------------------------------------------------------------------------------
 ; get_galaxies_noblob function
@@ -1134,6 +1230,9 @@ FUNCTION get_galaxies_noblob, ra, dec, radius, data
   galaxies_outside_aperture = WHERE (((distance GE radius) AND (data.CLASS_STAR LT 0.8) AND (data.IMAFLAGS_ISO EQ 0.)), n_galaxies)
   RETURN, galaxies_outside_aperture
 END
+
+
+
 
 
 
@@ -1167,6 +1266,9 @@ END
 
 
 
+
+
+
 FUNCTION Poisson_error, ngal 
 ;------------------------------------------------------------------------------------------------------------------------------------------------
 ; Poisson_error function 
@@ -1176,6 +1278,9 @@ FUNCTION Poisson_error, ngal
   error = sqrt(double(ngal))
   RETURN, error
 END 
+
+
+
 
 
 
@@ -1211,6 +1316,8 @@ FUNCTION colorsort, data, xcolor, ycolor, m, b, c
   RETURN, good
 END 
   
+
+
 
 
 
