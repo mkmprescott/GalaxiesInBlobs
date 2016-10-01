@@ -100,6 +100,7 @@ PRO density
  ; INITIAL SETUP 
 
    ; notify IDL of all functions used in this procedure
+      FORWARD_FUNCTION rsex
       FORWARD_FUNCTION get_galaxies
       FORWARD_FUNCTION get_galaxies_binned
       FORWARD_FUNCTION get_galaxies_noblob
@@ -114,9 +115,8 @@ PRO density
       binsize=0.5                     ; size of magnitude bins 
       brightestmag = 22.              ; smallest (brightest) magnitude of galaxies we can reasonably see in our images 
       dimmestmag = 30.                ; biggest (faintest) magnitude of galaxies we can reasonably see in our images 
-      nApertures = 1000.              ; number of random apertures to use in field density calculation 
+      nApertures = 1000.                ; number of random apertures to use in field density calculation 
       saveanyplots = 'y'              ; string indicating that user should be asked whether or not to save plots 
-      savereg = 'n'                   ; string indicating that user should be asked whether or not to save region files
 
    ; read in the file containing all blob information
       blobs = read_csv('blobs.csv', n_table_header=1)
@@ -124,7 +124,6 @@ PRO density
       blobname = blobs.FIELD01
       blobra = blobs.FIELD02
       blobdec = blobs.FIELD03
-      ; fields 4-7 are irrelevant information for this analysis 
       ;blueband = '/boomerang-data/alhall/LABoverdensity/GalaxiesInBlobs/catalogs/'+blobs.FIELD04
       ;midband = '/boomerang-data/alhall/LABoverdensity/GalaxiesInBlobs/catalogs/'+blobs.FIELD05
       ;redband = '/boomerang-data/alhall/LABoverdensity/GalaxiesInBlobs/catalogs/'+blobs.FIELD06
@@ -159,7 +158,9 @@ PRO density
    ; read in HST bad pixel map (for field analysis) 
       hsthdr =  headfits('/boomerang-data/alhall/LABoverdensity/GalaxiesInBlobs/3DHST/3DHSTimages/stacks/goodss_3dhst.v4.0.F125W_F140W_F160W_det.fits')
       hstmask = '/boomerang-data/alhall/LABoverdensity/GalaxiesInBlobs/3DHST/3DHSTimages/masks/GOODS-S_area.fits'
+   TIC
       hstbpm = -1.*(mrdfits(hstmask,0) - 1.)      ; this is the mask image for weeding out bad pixels in 3DHST field, in the same format as our blob bpms 
+   TOC
       hstsizeinfo = size(hstbpm)               ; the dimensions of the mask image in pixels 
       hstnpix_x = hstsizeinfo[1]               ; number of pixels in mask in the x direction
       hstnpix_y = hstsizeinfo[2]               ; number of pixels in mask in the y direction 
@@ -176,6 +177,7 @@ PRO density
          magrange=[brightestmag,dimmestmag]                        ; a two-element array containing only the endpoints of our magnitude range 
       ; plotting symbol: make the psym=8 symbol a filled circle for our plots 
          plotsym, 0, 1, /fill   
+
 
 
  ; DENSITY ANALYSIS FOR EACH BLOB 
@@ -197,6 +199,17 @@ PRO density
       blobcuts = colorsort(xcolorall, ycolorall, m[blob], b[blob], cap[blob])
       blobdatacuts = {ID:blobdata.ID[blobcuts], ra:blobdata.ra[blobcuts], dec:blobdata.dec[blobcuts], $
          redmag:blobdata.redmag[blobcuts], midmag:blobdata.midmag[blobcuts], bluemag:blobdata.bluemag[blobcuts]}
+  ;    dataredcut = colorsort(xcolorall, ycolorall, m[blob], b[blob], cap[blob], data=datared) 
+  ;    datamidcut = colorsort(xcolorall, ycolorall, m[blob], b[blob], cap[blob], data=datamid) 
+  ;    databluecut = colorsort(xcolorall, ycolorall, m[blob], b[blob], cap[blob], data=datablue) 
+  ;    ; consolidate all catalogs into one data cube for easy analysis (ie, we can analyze all bands at the same time)
+  ;    datacube = list()
+  ;    datacube.Add, datared
+  ;    datacube.Add, datamid
+  ;    datacube.Add, datablue
+  ;    datacube.Add, dataredcut
+  ;    datacube.Add, datamidcut
+  ;    datacube.Add, databluecut
 
    ; now do the same for 3DHST - but first figure out which blue band to use 
       IF (bluename[blob] EQ 'F606W') THEN goodssdata=goodsswithblue
@@ -214,17 +227,12 @@ PRO density
       npix_x = sizeinfo[1]               ; number of pixels in mask in the x direction
       npix_y = sizeinfo[2]               ; number of pixels in mask in the y direction 
 
-   ; make array of info about aperture radii - will contain overdensity factor & error on overdensity factor at each magnitude for each band
-      radiusresults = dblarr(n_radii, nbins, 6., 2.)            ; blob compared to blob field 
-      hstradiusresults = dblarr(n_radii, nbins, 6., 2.)         ; blob compared to 3D-HST field 
+   ; make array of info about aperture radii - will contain overdensity factor & error on overdensity factor at each magnitude for each band*********************************************************************************************************************
+      radiusresults = dblarr(n_radii, nbins, 6., 2.)
 
 
-  ; now run analysis of density for different aperture radii 
-
+   ; now run analysis of density for different aperture radii 
    FOR r=0, n_radii-1. DO BEGIN 
-
-    ; The following is split into parts to make things cleaner and easier to understand.
-
 
 
    ;PART 1: COLOR-COLOR STUFF
@@ -234,21 +242,19 @@ PRO density
      ; get the number of galaxies in the aperture AFTER color cuts
      blob_galaxies_all_cuts=get_galaxies(blobra[blob], blobdec[blob], ap_radius[r], blobdatacuts)
      ; make region files showing blob galaxies before and after color cuts  
-     IF (savereg EQ 'y') THEN BEGIN
-       makereg, blobdata, blob_galaxies_all, blobname[blob], ap_radius_arcsec[r], 'n'            ; before cuts 
-       makereg, blobdatacuts, blob_galaxies_all_cuts, blobname[blob], ap_radius_arcsec[r], 'y'    ; after cuts 
-     ENDIF   ; user wants to save anything
+;     makereg, blobdata, blob_galaxies_all, blobname[blob], ap_radius_arcsec[r], 'n'            ; before cuts 
+;     makereg, blobdatacuts, blob_galaxies_all_cuts, blobname[blob], ap_radius_arcsec[r], 'y'    ; after cuts 
      ;
      ; make color-color diagram: 
      field_galaxies = get_galaxies_noblob(blobra[blob], blobdec[blob], ap_radius[r], blobdata)   ; get IDs of field galaxies 
        ; set up plot window 
          !P.MULTI = [0,1,1,0,0] 
-         loadct, 0
-;         window, 1, retain=2, xsize=400, ysize=350
-;     colordiagram, blob_galaxies_all, field_galaxies, datared, datamid, datablue, redname[blob], midname[blob], $  ;************************************************************************************fix this when colordiagram procedure is updated*********************************************
-;                   bluename[blob], m[blob], b[blob], cap[blob], blobname[blob], ap_radius_arcsec[r] 
-;     namestring = titlemaker('colors', blobname[blob], radius=ap_radius_arcsec[r], filetype='.png')
-;     plotsave, saveanyplots, namestring
+;**********         loadct, 0
+;**********         window, 1, retain=2, xsize=400, ysize=350
+;**********     colordiagram, blob_galaxies_all, field_galaxies, datared, datamid, datablue, redname[blob], midname[blob], $
+                ;   bluename[blob], m[blob], b[blob], cap[blob], blobname[blob], ap_radius_arcsec[r] 
+;**********     namestring = titlemaker('colors', blobname[blob], radius=ap_radius_arcsec[r], filetype='.png')
+;**********     plotsave, saveanyplots, namestring
 
 
 
@@ -271,11 +277,9 @@ PRO density
      get_ngal_binned, nbins, blobmaglist, blob_ngal_binned, blob_ngalerr_binned 
      ; test to make sure it's working - this should match the previous no-bin number
      print, total(blob_ngal_binned[*,0]), " total galaxies"
-     print, total(blob_ngal_binned[*,3]), ' total galaxies after color cuts'
+     print, total(blob_ngal_binned[*,3]), ' total galaxies with color cuts'
      ; finally, get density and error on density 
      densitycalc, blob_ngal_binned, blob_ngalerr_binned, ap_radius[r], densities, density_errors
-
-
 
    ;PART 3: SAMPLING THE FIELD with random apertures 
      ;
@@ -292,66 +296,67 @@ PRO density
      hstap_ngalerr_binned = dblarr(nbins,6.,nApertures)   ; same as above but errors on # rather than just #
      hstmegalist = list()   ; list of lists, each corresponding to one aperture, containing the ID #s of all the galaxies in each mag bin in each band
      ;
-     ; make an aperture image where everything inside the aperture has a value of 1 and everything outside (just the edge stuff) has a value of 0 
+     ; make an aperture image and blank image into which to insert it 
      dist_ellipse, dim, [ 2.*ap_radius_pix[r], 2.*ap_radius_pix[r] ], ap_radius_pix[r], ap_radius_pix[r], 1.,0.
-       dim[where(dim LT ap_radius_pix[r], ntotalpix)] = 1.           ; note that ntotalpix is defined in this line as well
-       dim[where(dim GE ap_radius_pix[r])] = 0.
+       inside = where(dim LT ap_radius_pix[r])
+       outside = where(dim GE ap_radius_pix[r])
+       dim[inside] = 1. 
+       dim[outside] = 0.
+       ntotalpix = n_elements(dim[inside])
+;     blankim = ap_radius_pix[r]+fltarr(npix_x,npix_y)  
+     ap_count = 0 ; keep track of how many apertures are made in total  
      ; same as above but for HST field: 
      dist_ellipse, hstdim, [ 2.*hstap_radius_pix[r], 2.*hstap_radius_pix[r] ], hstap_radius_pix[r], hstap_radius_pix[r], 1.,0.
-       hstdim[where(hstdim LT ap_radius_pix[r], hstntotalpix)] = 1.           ; note that hstntotalpix is defined in this line as well
-       hstdim[where(hstdim GE ap_radius_pix[r])] = 0.
-     ; keep track of how many apertures are made in total
-     ap_count = 0        ; for the blob field  
-     hstap_count = 0     ; for the 3D-HST field
+       hstinside = where(hstdim LT ap_radius_pix[r])
+       hstoutside = where(hstdim GE ap_radius_pix[r])
+       hstdim[hstinside] = 1. 
+       hstdim[hstoutside] = 0.
+       hstntotalpix = n_elements(hstdim[hstinside])
+;     hstblankim = hstap_radius_pix[r]+fltarr(hstnpix_x,hstnpix_y)  
+     hstap_count = 0 ; keep track of how many apertures are made in total  
      ;
      ; now place random apertures and count galaxies inside them 
-     ; FOR THE BLOB FIELD 
-     print, 'BLOB FIELD ANALYSIS'
-       TIC        ; time this to ensure that it's efficient 
-       FOR ap=0, nApertures-1 DO BEGIN
-         ; find a good aperture to use: 
-            apfinder, npix_x, npix_y, ap_radius_pix[r], ap_radius[r], dim, bpm, hdr, ap_count, ap_x, ap_y, nbadpix, ntotalpix, ap_ra, ap_dec, blobra=blobra[blob], blobdec=blobdec[blob]   
-         ; calculate fraction of aperture that is good pixels:
-            ap_area_weight = (float(ntotalpix) - float(nbadpix)) / float(ntotalpix) 
-         ; convert pixels to sky coords and add these coords to arrays of aperture properties
-            xyad, hdr, ap_x, ap_y, ap_ra, ap_dec
-            ap_coords[0,ap] = ap_ra
-            ap_coords[1,ap] = ap_dec
-         ; create apmaglist  - will have six entries, all lists (one for each band; each entry is a list of IDs of galaxies in the blob in each mag bin)
-            galbinning, brightestmag, dimmestmag, binsize, ap_ra, ap_dec, ap_radius[r], blobdata, blobdatacuts, apmaglist       
-         ; put the list of ID numbers per mag bin in this aperture into the mega list for all apertures:
-            megalist.Add, apmaglist   
-         ; use apmaglist to fill in the ngals arrays
-            get_ngal_binned, nbins, apmaglist, ap_ngal_binned, ap_ngalerr_binned, ap=ap
-       ENDFOR    ; all the random apertures 
-       print, ap_count ; How many total apertures were generated? 
-       thrownout = (float(ap_count) - float(nApertures))/float(ap_count)*100.     ; percentage of generated apertures that ended up being unsuitable for analysis 
-       TOC             ; How long did this analysis take? 
-     ; FOR THE 3D-HST FIELD 
-     print, 'GOODS-S FIELD ANALYSIS'
-       TIC        ; time this to ensure that it's efficient 
-       FOR ap=0, nApertures-1 DO BEGIN
-         ; find a good aperture to use: 
-            apfinder, hstnpix_x, hstnpix_y, hstap_radius_pix[r], ap_radius[r], hstdim, hstbpm, hsthdr, hstap_count, hstap_x, hstap_y, hstnbadpix, hstntotalpix, hstap_ra, hstap_dec 
-         ; calculate fraction of aperture that is good pixels:
-            hstap_area_weight = (float(hstntotalpix) - float(hstnbadpix)) / float(hstntotalpix) 
-         ; convert pixels to sky coords and add these coords to arrays of aperture properties
-            xyad, hsthdr, hstap_x, hstap_y, hstap_ra, hstap_dec    ; for HST field
-            hstap_coords[0,ap] = hstap_ra
-            hstap_coords[1,ap] = hstap_dec
-         ; create apmaglist  - will have six entries, all lists (one for each band; each entry is a list of IDs of galaxies in the blob in each mag bin)
-            galbinning, brightestmag, dimmestmag, binsize, hstap_ra, hstap_dec, ap_radius[r], goodssdata, goodssdatacuts, hstapmaglist    
-         ; put the list of ID numbers per mag bin in this aperture into the mega list for all apertures:
-            hstmegalist.Add, hstapmaglist  
-         ; use apmaglist to fill in the ngals arrays
-            get_ngal_binned, nbins, hstapmaglist, hstap_ngal_binned, hstap_ngalerr_binned, ap=ap
-       ENDFOR    ; all the random apertures 
-       print, hstap_count ; How many total apertures were generated in HST field? 
-       hstthrownout = (float(hstap_count) - float(nApertures))/float(hstap_count)*100.     ; percentage of generated apertures that ended up being unsuitable for analysis 
-       TOC             ; How long did this analysis take? 
-     ; as a safety check, see how many apertures ended up being unsuitable in each analysis 
-     print, strcompress(string(thrownout)), '% of blob-field apertures thrown out'
-     print, strcompress(string(hstthrownout)), '% of GOODS-S apertures thrown out' 
+     TIC        ; time this to ensure that it's efficient 
+print, 'BLOB FIELD'
+     FOR ap=0, nApertures-1 DO BEGIN
+       ; find a good aperture to use: 
+          apfinder, npix_x, npix_y, ap_radius_pix[r], ap_radius[r], dim, bpm, hdr, ap_count, ap_x, ap_y, nbadpix, ntotalpix, ap_ra, ap_dec, blobra=blobra[blob], blobdec=blobdec[blob]   
+       ; calculate fraction of aperture that is good pixels:
+          ap_area_weight = (float(ntotalpix) - float(nbadpix)) / float(ntotalpix) 
+       ; convert pixels to sky coords and add these coords to arrays of aperture properties
+          xyad, hdr, ap_x, ap_y, ap_ra, ap_dec
+          ap_coords[0,ap] = ap_ra
+          ap_coords[1,ap] = ap_dec
+       ; create apmaglist  - will have six entries, all lists (one for each band; each entry is a list of IDs of galaxies in the blob in each mag bin)
+          galbinning, brightestmag, dimmestmag, binsize, ap_ra, ap_dec, ap_radius[r], blobdata, blobdatacuts, apmaglist       
+       ; put the list of ID numbers per mag bin in this aperture into the mega list for all apertures:
+          megalist.Add, apmaglist   
+       ; use apmaglist to fill in the ngals arrays
+          get_ngal_binned, nbins, apmaglist, ap_ngal_binned, ap_ngalerr_binned, ap=ap
+     ENDFOR    ; all the random apertures 
+     print, ap_count ; How many total apertures were generated? 
+     TOC             ; How long did this analysis take? 
+
+TIC
+print, 'GOODS-S FIELD'
+     FOR ap=0, nApertures-1 DO BEGIN
+       ; find a good aperture to use: 
+          apfinder, hstnpix_x, hstnpix_y, hstap_radius_pix[r], ap_radius[r], hstdim, hstbpm, hsthdr, hstap_count, hstap_x, hstap_y, hstnbadpix, hstntotalpix, hstap_ra, hstap_dec 
+       ; calculate fraction of aperture that is good pixels:
+          hstap_area_weight = (float(hstntotalpix) - float(hstnbadpix)) / float(hstntotalpix) 
+       ; convert pixels to sky coords and add these coords to arrays of aperture properties
+          xyad, hsthdr, hstap_x, hstap_y, hstap_ra, hstap_dec    ; for HST field
+          hstap_coords[0,ap] = hstap_ra
+          hstap_coords[1,ap] = hstap_dec
+       ; create apmaglist  - will have six entries, all lists (one for each band; each entry is a list of IDs of galaxies in the blob in each mag bin)
+          galbinning, brightestmag, dimmestmag, binsize, hstap_ra, hstap_dec, ap_radius[r], goodssdata, goodssdatacuts, hstapmaglist    
+       ; put the list of ID numbers per mag bin in this aperture into the mega list for all apertures:
+          hstmegalist.Add, hstapmaglist  
+       ; use apmaglist to fill in the ngals arrays
+          get_ngal_binned, nbins, hstapmaglist, hstap_ngal_binned, hstap_ngalerr_binned, ap=ap
+     ENDFOR    ; all the random apertures 
+     print, hstap_count ; How many total apertures were generated in HST field? 
+TOC
      ;
      ; calculate densities in each bin in each aperture and errors: 
         densitycalc, ap_ngal_binned, ap_ngalerr_binned, ap_radius[r], ap_densities, ap_density_errors, weight=ap_area_weight
@@ -362,10 +367,8 @@ PRO density
         hstfield_densities = total(hstap_densities,3)/double(nApertures)             ; for HST 
         hstfield_density_errors = total(hstap_density_errors,3)/double(nApertures)   ; for HST 
      ; calculate the overdensity factor and its error for analysis of how aperture size affects the measured overdensity
-        radiusresults[r,*,*,0] = densities/field_densities            ; overdensity factor wrt blob field 
-        radiusresults[r,*,*,1] = density_errors/field_densities       ; error on overdensity factor wrt blob field 
-        hstradiusresults[r,*,*,0] = densities/hstfield_densities            ; overdensity factor wrt 3D-HST field 
-        hstradiusresults[r,*,*,1] = density_errors/hstfield_densities       ; error on overdensity factor wrt 3D-HST field 
+;        radiusresults[r,*,*,0] = densities/field_densities            ; overdensity factor*******************************************************************************************
+;        radiusresults[r,*,*,1] = density_errors/field_densities       ; error on overdensity factor*******************************************************************************************
  
 
 
@@ -697,7 +700,7 @@ END             ; end of density procedure
 ;                                                                                                                                                                         ;
   PRO apfinder, npix_x, npix_y, ap_radius_pix, ap_radius, dim, bpm, hdr, ap_count, ap_x, ap_y, nbadpix, ntotalpix, ap_ra, ap_dec, blobra=blobra,blobdec=blobdec          ;;
   ;-------------------------------------------------------------------------------------------------------------------------------------------------;                     ;
-  ; apfinder procedure                                                                                                                              ;                     ;
+  ; apfinder procedure                                                                                                                              ;                     ;************?
   ;   description                                                                                                                                   ;                     ;
   ; INPUTS: etc                                                                                                                                     ;                     ;
   ;         etc                                                                                                                                     ;                     ;
@@ -722,13 +725,24 @@ END             ; end of density procedure
        IF ((yhi-ylo) NE (dimsize[2]-1.)) THEN BEGIN                                                                                                                      ;;
          yhi = ap_y + floor(ap_radius_pix) - 1.                                                                                                                          ;;
        ENDIF                                                                                                                                                             ;;
-       ; cut out the piece of the bpm that contains this random aperture                                                                                                  ;
-       minibpm = bpm[xlo:xhi,ylo:yhi]                                                                                                                                    ;;
-       ; multiply the aperture map by the bpm so only BAD pixels INSIDE the aperture are left (since we want to count them):                                              ;
-       apbpm = minibpm*dim                                                                                                                                               ;;
-       badpix = where(apbpm GT 0, nbadpix)   ; label the bad pixels                                                                                                       ;                                                                          ;
+       ; note: blankim used to be an input to this procedure
+;       ; create new image using array arithmetic: blank image with dim inserted into it                                                                                   ;
+;       newap = blankim                                                                                                                                                   ;;
+;       newap[xlo:xhi,ylo:yhi] = dim                                                                                                                                      ;;
+ minibpm = bpm[xlo:xhi,ylo:yhi]
+;       ; ignore everything outside the random aperture to make aperture map                                                                                               ;
+;       index = where(newap LT ap_radius_pix)                                                                                                                             ;;
+;       wheretomulti, newap, index, col, row, frame                                                                                                                       ;;
+;       newap[*,*] = 0.                                                                                                                                                   ;;
+;       newap[col,row]  = 1.                                                                                                                                              ;;
+       ; multiply the aperture map by the bpm so only GOOD pixels INSIDE the aperture are left:                                                                           ;
+;       apbpm = bpm*newap                                                                                                                                                 ;;
+apbpm = minibpm*dim
+       badpix = where(apbpm GT 0, nbadpix)   ; label the bad pixels                                                                                                       ;
+; NOTE: THE FOLLOWING LINE WAS FLAWED MATH! BAD BAD BAD 
+;       ntotalpix = n_elements(apbpm)         ; get the total number of pixels in the aperture                                                                             ;
                                                                                                                                                                          ;;
-      ; FIND VICINITY TO BLOB:                                                                                                                                            ;
+       ; FIND VICINITY TO BLOB:                                                                                                                                           ;
        IF (n_elements(blobra) NE 0) THEN BEGIN                                                                                                                           ;;
          xyad, hdr,ap_x, ap_y, ap_ra, ap_dec      ; convert pixels into coordnates in sky                                                                                 ;
          ; find how close the aperture is to the blob:                                                                                                                    ;
@@ -740,9 +754,7 @@ END             ; end of density procedure
         repeatflag = 1.                                                                                                                                                  ;; 
       ENDIF ELSE BEGIN                                                                                                                                                   ;;
         repeatflag = 0.                                                                                                                                                  ;;
-        ; keep a record of why this aperture was thrown out, just to make sure nothing is going amiss                                                                     ;
-        print, 'aperture #', strcompress(string(ap_count)), ' was within ', strcompress(string(vicinity/ap_radius),    $                                                 ;;
-            ' aperture radii of the blob with a bad-to-total pixel ratio of ', strcompress(string(float(nbadpix)/float(ntotalpix)))                                      ;;                                                                  ;;
+print, 'aperture number ', ap_count, ' was within ', vicinity/ap_radius, ' aperture radii of the blob and had a bad-to-total pixel ratio of ', float(nbadpix)/float(ntotalpix)
         ap_count++    ; note that another aperture is being made since this one failed to meet the criteria for a good aperture                                           ;
       ENDELSE                                                                                                                                                            ;;
     ENDWHILE                                                                                                                                                             ;;
@@ -765,7 +777,7 @@ END             ; end of density procedure
   PRO colordiagram, blobgals, fieldgals, datared, datamid, datablue, redname, midname, bluename, m, b, cap, blobname, radius                                             ;;
   ;-------------------------------------------------------------------------------------------------------------------------------------------------;                     ;
   ; colordiagram procedure                                                                                                                          ;                     ;
-  ;   description                                                                                                                                   ;                     ;************
+  ;   description                                                                                                                                   ;                     ;
   ; INPUTS: etc                                                                                                                                     ;                     ;
   ;         etc                                                                                                                                     ;                     ;
   ; NOTES:                                                                                                                                          ;                     ;
@@ -807,9 +819,9 @@ END             ; end of density procedure
 ;                                                                                                                                                                         ;
 ;                                                                                                                                                                         ;
 ;                                                                                                                                                                         ;
-  PRO densityplot, nbins, mags, field_densities, field_density_errs, densities, density_errs, hst_densities, hst_density_errs, blobname, nApertures, radius, band, cuts  ;;
+  PRO densityplot, nbins, mags, field_densities, field_density_errors, densities, density_errors, hst_densities, hst_density_errors, blobname, nApertures, radius, band, cuts                               ;;
   ;-------------------------------------------------------------------------------------------------------------------------------------------------;                     ;
-  ; densityplot procedure                                                                                                                           ;                     ;******make HST stuff look better
+  ; densityplot procedure                                                                                                                           ;                     ;
   ;   Makes plots of blob and field densities as a function of magnitude.                                                                           ;                     ;
   ; INPUTS: blobname - name of blob whose density is being plotted (for plot title)                                                                 ;                     ;
   ;         nbins - number of magnitude bins being plotted on the x-axis                                                                            ;                     ;
@@ -831,9 +843,9 @@ END             ; end of density procedure
      ENDFOR                                                                                                                                                              ;;
      ; y is specific to each catalog (band)                                                                                                                               ;
      ypoints=dblarr(2*nbins)                                                                                                                                             ;;
-     ypoints[0:nbins-1] = field_densities-field_density_errs                                                                                                             ;;
+     ypoints[0:nbins-1] = field_densities-field_density_errors                                                                                                           ;;
      FOR i=0, nbins-1 DO BEGIN                                                                                                                                           ;;
-       ypoints[i+nbins] = field_densities[nbins-1-i]+field_density_errs[nbins-1-i]                                                                                       ;;
+       ypoints[i+nbins] = field_densities[nbins-1-i]+field_density_errors[nbins-1-i]                                                                                     ;;
      ENDFOR                                                                                                                                                              ;;
    ; make the main plot comparing blob to field with error bars                                                                                                           ;
      ; set up titles for plot and axes                                                                                                                                    ;
@@ -843,11 +855,11 @@ END             ; end of density procedure
      plot, mags, densities, background=255, color=0, title=plottitle, xtitle=xtitle, ytitle=ytitle, psym=-8, /ylog, yrange=[1d3,1d6],/ystyle, $                          ;;
          xrange=[22.5,29.5],/xstyle, charsize=2., xthick=2, ythick=2, xmargin=[10,7], ymargin=[6,6]                                                                      ;;
      polyfill, xpoints, ypoints, color=200, clip=[22.5,1d3,29.5,1d6], /data, noclip=0                                                                                    ;;
-     errplot, mags, densities-density_errs, densities+density_errs, color=0, thick=2                                                                                     ;;
+     errplot, mags, densities-density_errors, densities+density_errors, color=0, thick=2                                                                                 ;;
      oplot, mags, densities, psym=-8, color=0, thick=2     ; have to do this again because polyfill covers it up                                                          ;
      oplot, mags, field_densities, color=0, linestyle=2, thick=2                                                                                                         ;;
-     oplot, mags, hst_densities, color=0, linestyle=5, thick=4                                                                                                           ;;
-     errplot, mags, hst_densities-hst_density_errs, hst_densities+hst_density_errs, color=0, thick=4                                                                     ;;
+     oplot, mags, hst_densities, color=0, linestyle=5, thick=4                                                                                                     ;;
+     errplot, mags, hst_densities-hst_density_errors, hst_densities+hst_density_errors, color=0, thick=4                                         ;;
      LEGEND, ['blob','field'], /right, /top, color=0, textcolor=0, linestyle=[0,2], thick=2., charsize=1, /box, outline_color=0.,number=0.1, charthick=1.5               ;;
      axis, color=0, xaxis=0, xrange=[22.5,29.5], /xstyle, /data, charsize=2, charthick=2, xtickformat="(A1)", xthick=2                                                   ;;
      axis, color=0, xaxis=1, xrange=[22.5,29.5], /xstyle, /data, charsize=0, xtickformat="(A1)", xthick=2                                                                ;;
@@ -865,7 +877,7 @@ END             ; end of density procedure
 ;                                                                                                                                                                         ;
   PRO statlum, mags, binsize, blob_ngal_binned, blob_ngal_binned_cuts, densities, field_densities, ap_radius, blobname, nApertures, ap_radius_arcsec, band               ;;
   ;-------------------------------------------------------------------------------------------------------------------------------------------------;                     ;
-  ; statlum procedure                                                                                                                               ;                     ;***********
+  ; statlum procedure                                                                                                                               ;                     ;
   ;   description                                                                                                                                   ;                     ;
   ; INPUTS: etc                                                                                                                                     ;                     ;
   ;         etc                                                                                                                                     ;                     ;
@@ -917,7 +929,7 @@ END             ; end of density procedure
   ;-------------------------------------------------------------------------------------------------------------------------------------------------;                     ;
   ; makehist procedure                                                                                                                              ;                     ;
   ;   description                                                                                                                                   ;                     ;
-  ; INPUTS: etc                                                                                                                                     ;                     ;***************
+  ; INPUTS: etc                                                                                                                                     ;                     ;
   ;         etc                                                                                                                                     ;                     ;
   ; NOTES:                                                                                                                                          ;                     ;
   ;-------------------------------------------------------------------------------------------------------------------------------------------------;                     ;
@@ -944,7 +956,7 @@ END             ; end of density procedure
   PRO Rmultirad, ap_radius_arcsec, mags, radiusresults, index, blobname, nApertures, band, cuts                                                                          ;;
   ;-------------------------------------------------------------------------------------------------------------------------------------------------;                     ;
   ; Rmultirad procedure                                                                                                                             ;                     ;
-  ;   description                                                                                                                                   ;                     ;*************
+  ;   description                                                                                                                                   ;                     ;
   ; INPUTS: etc                                                                                                                                     ;                     ;
   ;         etc                                                                                                                                     ;                     ;
   ; NOTES:                                                                                                                                          ;                     ;
@@ -981,7 +993,7 @@ END             ; end of density procedure
   PRO Rmultimag, mags, ap_radius_arcsec, radiusresults, index, blobname, nApertures, band, cuts                                                                          ;;
   ;-------------------------------------------------------------------------------------------------------------------------------------------------;                     ;
   ; Rmultimag procedure                                                                                                                             ;                     ;
-  ;   description                                                                                                                                   ;                     ;***********
+  ;   description                                                                                                                                   ;                     ;
   ; INPUTS: etc                                                                                                                                     ;                     ;
   ;         etc                                                                                                                                     ;                     ;
   ; NOTES:                                                                                                                                          ;                     ;
@@ -1243,16 +1255,17 @@ END             ; end of density procedure
 
 
 
-FUNCTION colorsort, xcolor, ycolor, m, b, c
+FUNCTION colorsort, xcolor, ycolor, m, b, c, data=data 
 ;------------------------------------------------------------------------------------------------------------------------------------------------;
 ; colorsort function                                                                                                                             ;
-;   Applies a simple linear (y >= mx + b) color cut to a catalog                                                                                 ;
-; INPUTS: xcolor - an array containing the blue-middle band color of every source in the data catalog                                            ; 
+;   Applies a simple linear (y >= mx + b) color cut to a catalog made by SExtractor.                                                             ;
+; INPUTS: data - a SExtractor catalog of sources                                                                                                 ;
+;         xcolor - an array containing the blue-middle band color of every source in the data catalog                                            ; 
 ;         ycolor - an array containing the middle-red band color of every source in the data catalog                                             ; 
 ;         m - the slope of a line marking a simple color cut (unitless)                                                                          ;
 ;         b - the y-intercept of the simple color cut line (unitless)                                                                            ;
 ;         c - a "cap" value for color cuts, above which all colors are considered "good" (unitless)                                              ;
-; OUTPUT: good - the index numbers of all the sources in the catalog with colors above the cut                                                   ;
+; OUTPUT: good - the index numbers of all the sources in the data catalog with colors above the cut                                              ;
 ; NOTES: The cut made is illustrated below. Asterisks mark "good" sources, while periods mark sources that get thrown out by the cut.            ;
 ;                                                                                                                                                ;
 ;                               |   *     *    *      *                                                                                          ;
@@ -1267,7 +1280,11 @@ FUNCTION colorsort, xcolor, ycolor, m, b, c
 ;                               |_____/________________________                                                                                  ;
 ;                     (y = mx + b)----^       xcolor                                                                                             ;
 ;------------------------------------------------------------------------------------------------------------------------------------------------;
-  good = WHERE ((ycolor GE (xcolor*m + b)) OR (ycolor GE c))
+  IF (n_elements(data) NE 0) THEN BEGIN
+    good = data[WHERE ((ycolor GE (xcolor*m + b)) OR (ycolor GE c))]
+  ENDIF ELSE BEGIN
+    good = WHERE ((ycolor GE (xcolor*m + b)) OR (ycolor GE c))
+  ENDELSE 
   RETURN, good
 END 
 
@@ -1280,7 +1297,11 @@ END
 
 
 
-; NOTE: THE FOLLOWING FUNCTION(S) AND/OR PROCEDURE(S) WAS/WERE NOT WRITTEN BY AGNAR. 
+; NOTE: THE FOLLOWING FUNCTIONS AND PROCEDURES WERE NOT WRITTEN BY AGNAR. 
+;
+;
+;
+;
 ;
 ;
 ;
