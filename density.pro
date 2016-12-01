@@ -368,7 +368,17 @@ PRO density
         hstradiusresults[r,*,*,1] = density_errors/hstfield_densities       ; error on overdensity factor wrt 3D-HST field 
  
 
+     !P.MULTI = [0,1,1,0,1]
+     window, 1, retain=2, xsize=1200, ysize=1000
+     densityplotsmall, nbins, mags, hstfield_densities[*,0], hstfield_density_errors[*,0], densities[*,0], density_errors[*,0], blobname[blob], nApertures, ap_radius_arcsec[r], redname[blob], 'n'
+     namestring = strcompress(string(blobname[blob]))+'NMsymposium_overdensity_raw.png'
+     plotsave, saveanyplots, namestring
+     densityplotsmall, nbins, mags, hstfield_densities[*,3], hstfield_density_errors[*,3], densities[*,3], density_errors[*,3], blobname[blob], nApertures, ap_radius_arcsec[r], redname[blob], 'y'
+     namestring = strcompress(string(blobname[blob]))+'NMsymposium_overdensity_cuts.png'
+     plotsave, saveanyplots, namestring
 
+proceed = 'n'
+IF (proceed NE 'n') THEN BEGIN
    ;PART 4: COMPARING THE BLOB AND THE FIELD 
      ;
      ; MAIN OVERDENSITY PLOTS:
@@ -389,96 +399,100 @@ PRO density
      ; save the window of plots 
      namestring = titlemaker('overdensity', blobname[blob], nApertures=nApertures, radius=ap_radius_arcsec[r], filetype='.png')
      plotsave, saveanyplots, namestring
+ENDIF           ; user wants to make these plots 
 
-proceed = 'n'
-IF (proceed NE 'n') THEN BEGIN
+
 ;***************************************************************************************PICK UP HERE*****************************************************************************************************************************************************************
 
 
+;     ;
+;     ; STATISTICAL LUMINOSITY FUNCTIONS 
+;     ; combine everything from before to make these - see statlum procedure header 
+;     !P.MULTI = [0,1,3,0,1]
+;     window, 1, retain=2, xsize=650, ysize=1200
+;     ; RED:
+;     statlum, mags, binsize, blob_ngal_binned[*,0], blob_ngal_binned[*,3], densities[*,0], field_densities[*,0], ap_radius[r], blobname[blob], nApertures, ap_radius_arcsec[r], redname[blob]  
+;     ; MIDDLE: 
+;     statlum, mags, binsize, blob_ngal_binned[*,1], blob_ngal_binned[*,4], densities[*,1], field_densities[*,1], ap_radius[r], blobname[blob], nApertures, ap_radius_arcsec[r], midname[blob]  
+;     ; BLUE: 
+;     statlum, mags, binsize, blob_ngal_binned[*,2], blob_ngal_binned[*,5], densities[*,2], field_densities[*,2], ap_radius[r], blobname[blob], nApertures, ap_radius_arcsec[r], bluename[blob] 
+;     ; save the window of plots 
+;     namestring = titlemaker('statlum', blobname[blob], nApertures=nApertures, radius=ap_radius_arcsec[r], filetype='.png') 
+;     plotsave, saveanyplots, namestring
+;
+;     ;
+;     ; HISTOGRAMS: How likely is it to find overdensities in this field anyway? 
+;     ap_numbers_corrected = ap_densities*!dPI*ap_radius[r]^2.    ; calculate the number of galaxies in each random aperture corrected for bad pixels 
+;     ap_n = ap_numbers_corrected[*,0,*]        ; corrected number of galaxies in each aperture without cuts (using the red band)
+;     ap_n_cuts = ap_numbers_corrected[*,3,*]   ; corrected number of galaxies in each aperture with cuts (using the red band) 
+;     ap_totals = total(ap_n,1)              ; total number of galaxies in each aperture regardless of magnitude
+;     ap_totals_cuts = total(ap_n_cuts,1)    ; total number of galaxies in each aperture regardless of magnitude
      ;
-     ; STATISTICAL LUMINOSITY FUNCTIONS 
-     ; combine everything from before to make these - see statlum procedure header 
-     !P.MULTI = [0,1,3,0,1]
-     window, 1, retain=2, xsize=650, ysize=1200
-     ; RED:
-     statlum, mags, binsize, blob_ngal_binned[*,0], blob_ngal_binned[*,3], densities[*,0], field_densities[*,0], ap_radius[r], blobname[blob], nApertures, ap_radius_arcsec[r], redname[blob]  
-     ; MIDDLE: 
-     statlum, mags, binsize, blob_ngal_binned[*,1], blob_ngal_binned[*,4], densities[*,1], field_densities[*,1], ap_radius[r], blobname[blob], nApertures, ap_radius_arcsec[r], midname[blob]  
-     ; BLUE: 
-     statlum, mags, binsize, blob_ngal_binned[*,2], blob_ngal_binned[*,5], densities[*,2], field_densities[*,2], ap_radius[r], blobname[blob], nApertures, ap_radius_arcsec[r], bluename[blob] 
-     ; save the window of plots 
-     namestring = titlemaker('statlum', blobname[blob], nApertures=nApertures, radius=ap_radius_arcsec[r], filetype='.png') 
-     plotsave, saveanyplots, namestring
-     ;
-     ; HISTOGRAMS: How likely is it to find overdensities in this field anyway? 
-     ap_numbers_corrected = ap_densities*!dPI*ap_radius[r]^2.    ; calculate the number of galaxies in each random aperture corrected for bad pixels 
-     ap_n = ap_numbers_corrected[*,0,*]        ; corrected number of galaxies in each aperture without cuts (using the red band)
-     ap_n_cuts = ap_numbers_corrected[*,3,*]   ; corrected number of galaxies in each aperture with cuts (using the red band) 
-     ap_totals = total(ap_n,1)              ; total number of galaxies in each aperture regardless of magnitude
-     ap_totals_cuts = total(ap_n_cuts,1)    ; total number of galaxies in each aperture regardless of magnitude
+     ; 3DHST HISTOGRAMS: How likely is it to find overdensities in this field anyway? 
+         ; NOTE: dimensions of ap_numbers_corrected are [mag bin, band, aperture]!!!!!!!!!!!!!!!!!!!!!!!!
+     hstap_numbers_corrected = hstap_densities*!dPI*ap_radius[r]^2.    ; calculate the number of galaxies in each random aperture corrected for bad pixels 
+     hstap_n = hstap_numbers_corrected[*,0,*]        ; corrected number of galaxies in each aperture without cuts (using the red band)
+     hstap_n_cuts = hstap_numbers_corrected[*,3,*]   ; corrected number of galaxies in each aperture with cuts (using the red band) 
+     hstap_totals = total(hstap_n,1)              ; total number of galaxies in each aperture regardless of magnitude
+     hstap_totals_cuts = total(hstap_n_cuts,1)    ; total number of galaxies in each aperture regardless of magnitude
      ; set up a new plot window
      !P.MULTI = [0,2,1,0,1]
      window, 1, retain=2, xsize=1200, ysize=400
      ; compare total numbers (regardless of magnitude) to blob, no cuts
-     makehist, ap_totals, total(blob_ngal_binned[*,0]), blobname[blob], nApertures, ap_radius_arcsec[r], 'n'  
+     makehist, hstap_totals, total(blob_ngal_binned[*,0]), blobname[blob], nApertures, ap_radius_arcsec[r], 'n'  
      ; compare total numbers (regardless of magnitude) to blob WITH cuts
-     makehist, ap_totals_cuts, total(blob_ngal_binned[*,3]), blobname[blob], nApertures, ap_radius_arcsec[r], 'y'  
+     makehist, hstap_totals_cuts, total(blob_ngal_binned[*,3]), blobname[blob], nApertures, ap_radius_arcsec[r], 'y'  
      ; save the window of plots 
      namestring = titlemaker('aphist', blobname[blob], nApertures=nApertures, radius=ap_radius_arcsec[r], filetype='.png')
      plotsave, saveanyplots, namestring
 
-ENDIF  ; user wanted to do this extra stuff
-
    ENDFOR   ; all aperture sizes
 
-IF (proceed NE 'n') THEN BEGIN
-
-   ;PART 5: ANALYSIS OF APERTURE SIZE IMPACT ON MEASURED OVERDENSITY 
-     ;
-   ; if there were multiple aperture radii being tested, analyze them with plots:  
-   IF (n_radii GT 1.) THEN BEGIN 
-     ;
-     ; now make plots of the results of the aperture size analysis: overdensity factor vs magnitude for each band for each radius size 
-     loadct, 39    ; new color table 
-     !P.MULTI = [0,2,3,0,1]
-     window, 1, retain=2, xsize=950, ysize=1200
-     ; RED BAND, NO CUTS
-     Rmultirad, ap_radius_arcsec, mags, radiusresults, 0, blobname[blob], nApertures, redname[blob], 'n'
-     ; MIDDLE BAND, NO CUTS
-     Rmultirad, ap_radius_arcsec, mags, radiusresults, 1, blobname[blob], nApertures, midname[blob], 'n' 
-     ; BLUE BAND, NO CUTS
-     Rmultirad, ap_radius_arcsec, mags, radiusresults, 2, blobname[blob], nApertures, bluename[blob], 'n' 
-     ; RED BAND WITH CUTS
-     Rmultirad, ap_radius_arcsec, mags, radiusresults, 3, blobname[blob], nApertures, redname[blob], 'y' 
-     ; MIDDLE BAND WITH CUTS
-     Rmultirad, ap_radius_arcsec, mags, radiusresults, 4, blobname[blob], nApertures, midname[blob], 'y' 
-     ; BLUE BAND WITH CUTS
-     Rmultirad, ap_radius_arcsec, mags, radiusresults, 5, blobname[blob], nApertures, bluename[blob], 'y' 
-     ; save the window of plots 
-     namestring = titlemaker('Rmultirad', blobname[blob], nApertures=nApertures, filetype='.png')
-     plotsave, saveanyplots, namestring
-     ;
-     ; more plots of the results of the aperture size analysis: overdensity factor vs aperture radius for each band for each mag bin 
-     window, 1, retain=2, xsize=950, ysize=1200
-     ; RED BAND, NO CUTS
-     Rmultimag, mags, ap_radius_arcsec, radiusresults, 0, blobname[blob], nApertures, redname[blob], 'n' 
-     ; MIDDLE BAND, NO CUTS
-     Rmultimag, mags, ap_radius_arcsec, radiusresults, 1, blobname[blob], nApertures, midname[blob], 'n' 
-     ; BLUE BAND, NO CUTS
-     Rmultimag, mags, ap_radius_arcsec, radiusresults, 2, blobname[blob], nApertures, bluename[blob], 'n' 
-     ; RED BAND WITH CUTS
-     Rmultimag, mags, ap_radius_arcsec, radiusresults, 3, blobname[blob], nApertures, redname[blob], 'y' 
-     ; MIDDLE BAND WITH CUTS
-     Rmultimag, mags, ap_radius_arcsec, radiusresults, 4, blobname[blob], nApertures, midname[blob], 'y' 
-     ; BLUE BAND WITH CUTS
-     Rmultimag, mags, ap_radius_arcsec, radiusresults, 5, blobname[blob], nApertures, bluename[blob], 'y' 
-     ; save the window of plots 
-     namestring = titlemaker('Rmultimag', blobname[blob], nApertures=nApertures, filetype='.png')
-     plotsave, saveanyplots, namestring
-     ;
-   ENDIF     ; there are multiple aperture radii being tested 
-
-ENDIF  ; user wanted to do this extra stuff
+;
+;   ;PART 5: ANALYSIS OF APERTURE SIZE IMPACT ON MEASURED OVERDENSITY 
+;     ;
+;   ; if there were multiple aperture radii being tested, analyze them with plots:  
+;   IF (n_radii GT 1.) THEN BEGIN 
+;     ;
+;     ; now make plots of the results of the aperture size analysis: overdensity factor vs magnitude for each band for each radius size 
+;     loadct, 39    ; new color table 
+;     !P.MULTI = [0,2,3,0,1]
+;     window, 1, retain=2, xsize=950, ysize=1200
+;     ; RED BAND, NO CUTS
+;     Rmultirad, ap_radius_arcsec, mags, radiusresults, 0, blobname[blob], nApertures, redname[blob], 'n'
+;     ; MIDDLE BAND, NO CUTS
+;     Rmultirad, ap_radius_arcsec, mags, radiusresults, 1, blobname[blob], nApertures, midname[blob], 'n' 
+;     ; BLUE BAND, NO CUTS
+;     Rmultirad, ap_radius_arcsec, mags, radiusresults, 2, blobname[blob], nApertures, bluename[blob], 'n' 
+;     ; RED BAND WITH CUTS
+;     Rmultirad, ap_radius_arcsec, mags, radiusresults, 3, blobname[blob], nApertures, redname[blob], 'y' 
+;     ; MIDDLE BAND WITH CUTS
+;     Rmultirad, ap_radius_arcsec, mags, radiusresults, 4, blobname[blob], nApertures, midname[blob], 'y' 
+;     ; BLUE BAND WITH CUTS
+;     Rmultirad, ap_radius_arcsec, mags, radiusresults, 5, blobname[blob], nApertures, bluename[blob], 'y' 
+;     ; save the window of plots 
+;     namestring = titlemaker('Rmultirad', blobname[blob], nApertures=nApertures, filetype='.png')
+;     plotsave, saveanyplots, namestring
+;     ;
+;     ; more plots of the results of the aperture size analysis: overdensity factor vs aperture radius for each band for each mag bin 
+;     window, 1, retain=2, xsize=950, ysize=1200
+;     ; RED BAND, NO CUTS
+;     Rmultimag, mags, ap_radius_arcsec, radiusresults, 0, blobname[blob], nApertures, redname[blob], 'n' 
+;     ; MIDDLE BAND, NO CUTS
+;     Rmultimag, mags, ap_radius_arcsec, radiusresults, 1, blobname[blob], nApertures, midname[blob], 'n' 
+;     ; BLUE BAND, NO CUTS
+;     Rmultimag, mags, ap_radius_arcsec, radiusresults, 2, blobname[blob], nApertures, bluename[blob], 'n' 
+;     ; RED BAND WITH CUTS
+;     Rmultimag, mags, ap_radius_arcsec, radiusresults, 3, blobname[blob], nApertures, redname[blob], 'y' 
+;     ; MIDDLE BAND WITH CUTS
+;     Rmultimag, mags, ap_radius_arcsec, radiusresults, 4, blobname[blob], nApertures, midname[blob], 'y' 
+;     ; BLUE BAND WITH CUTS
+;     Rmultimag, mags, ap_radius_arcsec, radiusresults, 5, blobname[blob], nApertures, bluename[blob], 'y' 
+;     ; save the window of plots 
+;     namestring = titlemaker('Rmultimag', blobname[blob], nApertures=nApertures, filetype='.png')
+;     plotsave, saveanyplots, namestring
+;     ;
+;   ENDIF     ; there are multiple aperture radii being tested 
 
 
  ENDFOR ;all the blobs
@@ -709,7 +723,7 @@ END             ; end of density procedure
       ; make a random aperture:                                                                                                                                           ;
        ap_x = floor(ap_radius_pix + (double(npix_x)-2.*ap_radius_pix)*randomu(seed))                                                                                     ;;
        ap_y = floor(ap_radius_pix + (double(npix_y)-2.*ap_radius_pix)*randomu(seed))                                                                                     ;;
-      ; FIND BAD PIXELS:                                                                                                                                                  ;'
+      ; FIND BAD PIXELS:                                                                                                                                                  ;
        ; find corners of box into which to insert aperture image                                                                                                          ; 
        xlo = ap_x - floor(ap_radius_pix)                                                                                                                                 ;; 
        xhi = ap_x + floor(ap_radius_pix)                                                                                                                                 ;;
@@ -726,7 +740,7 @@ END             ; end of density procedure
        minibpm = bpm[xlo:xhi,ylo:yhi]                                                                                                                                    ;;
        ; multiply the aperture map by the bpm so only BAD pixels INSIDE the aperture are left (since we want to count them):                                              ;
        apbpm = minibpm*dim                                                                                                                                               ;;
-       badpix = where(apbpm GT 0, nbadpix)   ; label the bad pixels                                                                                                       ;                                                                          ;
+       badpix = where(apbpm GT 0, nbadpix)   ; label the bad pixels                                                                                                       ;
                                                                                                                                                                          ;;
       ; FIND VICINITY TO BLOB:                                                                                                                                            ;
        IF (n_elements(blobra) NE 0) THEN BEGIN                                                                                                                           ;;
@@ -741,8 +755,9 @@ END             ; end of density procedure
       ENDIF ELSE BEGIN                                                                                                                                                   ;;
         repeatflag = 0.                                                                                                                                                  ;;
         ; keep a record of why this aperture was thrown out, just to make sure nothing is going amiss                                                                     ;
-        print, 'aperture #', strcompress(string(ap_count)), ' was within ', strcompress(string(vicinity/ap_radius),    $                                                 ;;
-            ' aperture radii of the blob with a bad-to-total pixel ratio of ', strcompress(string(float(nbadpix)/float(ntotalpix)))                                      ;;                                                                  ;;
+        pixratio = float(nbadpix)/float(ntotalpix)                                                                                                                       ;;
+        print, 'aperture ', strcompress(string(ap_count)), ' was within ', strcompress(string(vicinity/ap_radius)), $                                                    ;;
+          ' aperture radii of LAB with bad/total pixel ratio of ', strcompress(string(pixratio))                                                                         ;;
         ap_count++    ; note that another aperture is being made since this one failed to meet the criteria for a good aperture                                           ;
       ENDELSE                                                                                                                                                            ;;
     ENDWHILE                                                                                                                                                             ;;
@@ -823,6 +838,65 @@ END             ; end of density procedure
   ;         cuts - a string, 'y' or 'n', showing whether the densities used are for raw data or post-color-cut data (for plot title)                ;                     ;
   ;-------------------------------------------------------------------------------------------------------------------------------------------------;                     ;
    FORWARD_FUNCTION titlemaker           ; this function is used in this procedure                                                                                        ;
+     loadct, 0                                                                                                                                                           ;;
+   ; set up vertices of polygon for polyfill                                                                                                                              ;
+     xpoints = dblarr(2*nbins)                                                                                                                                           ;;
+     xpoints[0:nbins-1] = mags                                                                                                                                           ;;
+     FOR i=0, nbins-1 DO BEGIN                                                                                                                                           ;;
+       xpoints[i+nbins] = mags[nbins-1-i]                                                                                                                                ;;
+     ENDFOR                                                                                                                                                              ;;
+     ; y is specific to each catalog (band)                                                                                                                               ;
+     ypoints=dblarr(2*nbins)                                                                                                                                             ;;
+     ypoints[0:nbins-1] = field_densities-field_density_errs                                                                                                             ;;
+     FOR i=0, nbins-1 DO BEGIN                                                                                                                                           ;;
+       ypoints[i+nbins] = field_densities[nbins-1-i]+field_density_errs[nbins-1-i]                                                                                       ;;
+     ENDFOR                                                                                                                                                              ;;
+   ; make the main plot comparing blob to field with error bars                                                                                                           ;
+     ; set up titles for plot and axes                                                                                                                                    ;
+        plottitle = titlemaker('overdensity', blobname, nApertures=nApertures, radius=radius, band=band, cuts=cuts)                                                      ;;
+        xtitle = 'magnitude (' + band + ')'                                                                                                                              ;;
+        ytitle='N!Igal!N per deg!E2!N per 0.5 mag'                                                                                                                       ;;
+     plot, mags, densities, background=255, color=0, title=plottitle, xtitle=xtitle, ytitle=ytitle, psym=-8, /ylog, yrange=[1d3,5d6],/ystyle, $                          ;;
+         xrange=[22.5,29.5],/xstyle, charsize=2., xthick=2, ythick=2, xmargin=[10,7], ymargin=[6,6]                                                                      ;;
+     polyfill, xpoints, ypoints, color=200, clip=[22.5,1d3,29.5,5d6], /data, noclip=0                                                                                    ;;
+     errplot, mags, densities-density_errs, densities+density_errs, color=0, thick=2                                                                                     ;;
+     oplot, mags, densities, psym=-8, color=0, thick=2     ; have to do this again because polyfill covers it up                                                          ;
+     oplot, mags, field_densities, color=0, linestyle=2, thick=2                                                                                                         ;;
+     loadct, 39                                                                                                                                                          ;;
+     oplot, mags, hst_densities, color=50, linestyle=5, thick=2                                                                                                          ;;
+     errplot, mags, hst_densities-hst_density_errs, hst_densities+hst_density_errs, color=50, thick=2                                                                    ;;
+     LEGEND, ['blob','blob field', 'GOODS-S field'], /left, /top, color=[0,0,50], textcolor=0, linestyle=[0,2,5], thick=2., charsize=1, /box, outline_color=0.,number=0.1, charthick=1.5               ;;
+     axis, color=0, xaxis=0, xrange=[22.5,29.5], /xstyle, /data, charsize=2, charthick=2, xtickformat="(A1)", xthick=2                                                   ;;
+     axis, color=0, xaxis=1, xrange=[22.5,29.5], /xstyle, /data, charsize=0, xtickformat="(A1)", xthick=2                                                                ;;
+     axis, color=0, yaxis=0, /ylog, yrange=[1d3,5d6], /ystyle,  /ynozero, /data, charsize=2, charthick=2, ytickformat="(A1)", ythick=2                                   ;;
+     axis, color=0, yaxis=1, /ylog, yrange=[1d3,5d6], /ystyle,  /ynozero, /data, charsize=0, ytickformat="(A1)", ythick=2                                                ;;
+  END                                                                                                                                                                    ;; 
+;                                                                                                                                                                         ;
+;                                                                                                                                                                         ;
+;                                                                                                                                                                         ;
+;                                                                                                                                                                         ;
+;                                                                                                                                                                         ;
+;                                                                                                                                                                         ;
+;                                                                                                                                                                         ;
+;                                                                                                                                                                         ;
+;                                                                                                                                                                         ;
+  PRO densityplotsmall, nbins, mags, field_densities, field_density_errs, densities, density_errs, blobname, nApertures, radius, band, cuts                              ;;
+  ;-------------------------------------------------------------------------------------------------------------------------------------------------;                     ;
+  ; densityplot procedure                                                                                                                           ;                     ;
+  ;   Makes plots of blob and field densities as a function of magnitude.                                                                           ;                     ;
+  ; INPUTS: blobname - name of blob whose density is being plotted (for plot title)                                                                 ;                     ;
+  ;         nbins - number of magnitude bins being plotted on the x-axis                                                                            ;                     ;
+  ;         mags - array of magnitudes (data for the x-axis)                                                                                        ;                     ;
+  ;         field_densities - array of field density measurements (data for the y-axis)                                                             ;                     ;
+  ;         field_density_errors - array of errors on field density measurements (to be overplotted as a swath on top of field_densities)           ;                     ;
+  ;         densities - array of blob density measurements (also data for the y-axis)                                                               ;                     ;
+  ;         density_errors - array of errors on blob density measurements (to be overplotted on top of densities using errplot)                     ;                     ;
+  ;         apsnameplot - a string showing the number of random apertures used in the analysis (for plot title)                                     ;                     ;
+  ;         xtitle - a string containing the label for the x-axis of the plot                                                                       ;                     ;
+  ;         cuts - a string, 'y' or 'n', showing whether the densities used are for raw data or post-color-cut data (for plot title)                ;                     ;
+  ;-------------------------------------------------------------------------------------------------------------------------------------------------;                     ;
+   FORWARD_FUNCTION titlemaker           ; this function is used in this procedure                                                                                        ;
+     loadct, 0                                                                                                                                                           ;;
    ; set up vertices of polygon for polyfill                                                                                                                              ;
      xpoints = dblarr(2*nbins)                                                                                                                                           ;;
      xpoints[0:nbins-1] = mags                                                                                                                                           ;;
@@ -841,18 +915,16 @@ END             ; end of density procedure
         xtitle = 'magnitude (' + band + ')'                                                                                                                              ;;
         ytitle='N!Igal!N per deg!E2!N per 0.5 mag'                                                                                                                       ;;
      plot, mags, densities, background=255, color=0, title=plottitle, xtitle=xtitle, ytitle=ytitle, psym=-8, /ylog, yrange=[1d3,1d6],/ystyle, $                          ;;
-         xrange=[22.5,29.5],/xstyle, charsize=2., xthick=2, ythick=2, xmargin=[10,7], ymargin=[6,6]                                                                      ;;
+         xrange=[22.5,29.5],/xstyle, charsize=2.5, xthick=2, ythick=2, xmargin=[10,7], ymargin=[6,6], charthick=2                                                                      ;;
      polyfill, xpoints, ypoints, color=200, clip=[22.5,1d3,29.5,1d6], /data, noclip=0                                                                                    ;;
-     errplot, mags, densities-density_errs, densities+density_errs, color=0, thick=2                                                                                     ;;
-     oplot, mags, densities, psym=-8, color=0, thick=2     ; have to do this again because polyfill covers it up                                                          ;
-     oplot, mags, field_densities, color=0, linestyle=2, thick=2                                                                                                         ;;
-     oplot, mags, hst_densities, color=0, linestyle=5, thick=4                                                                                                           ;;
-     errplot, mags, hst_densities-hst_density_errs, hst_densities+hst_density_errs, color=0, thick=4                                                                     ;;
-     LEGEND, ['blob','field'], /right, /top, color=0, textcolor=0, linestyle=[0,2], thick=2., charsize=1, /box, outline_color=0.,number=0.1, charthick=1.5               ;;
-     axis, color=0, xaxis=0, xrange=[22.5,29.5], /xstyle, /data, charsize=2, charthick=2, xtickformat="(A1)", xthick=2                                                   ;;
-     axis, color=0, xaxis=1, xrange=[22.5,29.5], /xstyle, /data, charsize=0, xtickformat="(A1)", xthick=2                                                                ;;
-     axis, color=0, yaxis=0, /ylog, yrange=[1d3,1d6], /ystyle,  /ynozero, /data, charsize=2, charthick=2, ytickformat="(A1)", ythick=2                                   ;;
-     axis, color=0, yaxis=1, /ylog, yrange=[1d3,1d6], /ystyle,  /ynozero, /data, charsize=0, ytickformat="(A1)", ythick=2                                                ;;
+     errplot, mags, densities-density_errs, densities+density_errs, color=0, thick=4                                                                                     ;;
+     oplot, mags, densities, psym=-8, color=0, thick=4     ; have to do this again because polyfill covers it up                                                          ;
+     oplot, mags, field_densities, color=0, linestyle=2, thick=4                                                                                                         ;;                                                                  ;;
+     LEGEND, ['blob','field (GOODS-S)'], /right, /top, color=[0,50], textcolor=0, linestyle=[0,2], thick=4., charsize=2.5, /box, outline_color=0., charthick=2, number=0.1            ;;
+     axis, color=0, xaxis=0, xrange=[22.5,29.5], /xstyle, /data, charsize=4, charthick=2, xtickformat="(A1)", xthick=4                                                   ;;
+     axis, color=0, xaxis=1, xrange=[22.5,29.5], /xstyle, /data, charsize=0, xtickformat="(A1)", xthick=4                                                                ;;
+     axis, color=0, yaxis=0, /ylog, yrange=[1d3,1d6], /ystyle,  /ynozero, /data, charsize=4, charthick=2, ytickformat="(A1)", ythick=4                                   ;;
+     axis, color=0, yaxis=1, /ylog, yrange=[1d3,1d6], /ystyle,  /ynozero, /data, charsize=0, ytickformat="(A1)", ythick=4                                                ;;
   END                                                                                                                                                                    ;; 
 ;                                                                                                                                                                         ;
 ;                                                                                                                                                                         ;
@@ -862,7 +934,7 @@ END             ; end of density procedure
 ;                                                                                                                                                                         ;
 ;                                                                                                                                                                         ;
 ;                                                                                                                                                                         ;
-;                                                                                                                                                                         ;
+;   
   PRO statlum, mags, binsize, blob_ngal_binned, blob_ngal_binned_cuts, densities, field_densities, ap_radius, blobname, nApertures, ap_radius_arcsec, band               ;;
   ;-------------------------------------------------------------------------------------------------------------------------------------------------;                     ;
   ; statlum procedure                                                                                                                               ;                     ;***********
