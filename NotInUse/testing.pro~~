@@ -1,0 +1,232 @@
+modularize:
+   dumb histograms 
+   random aps!!!!!!!!!!!!!
+
+other stuff: 
+   rewrite all the headers
+   try radius stuff less than 10 
+
+
+
+
+old thing:    
+   ; determine ahead of time whether or not to bother saving any files
+   saveanyplots = ''
+   READ, saveanyplots, PROMPT='Save any color-color plots, overdensity plots, statistical luminosity functions, or histograms? (y/n)'
+   IF ((saveanyplots NE 'y') AND (saveanyplots NE 'n')) THEN BEGIN 
+     WHILE ((saveanyplots NE 'y') AND (saveanyplots NE 'n')) DO BEGIN 
+       print, 'Invalid response. Choose y or n.' 
+       READ, saveanyplots, PROMPT='Save any color-color plots, overdensity plots, statistical luminosity functions, or histograms? (y/n)'
+     ENDWHILE
+   ENDIF
+
+
+; overdensity plot tags: 
+  ; red no cuts 
+      ; namestring = titlemaker('overdensity', blobname[blob], nApertures=nApertures, radius=ap_radius_arcsec[r], band=redname[blob], cuts='n', filetype='.png')
+      ; plotsave, saveanyplots, namestring
+      ;
+  ; mid no cuts 
+      ; namestring = titlemaker('overdensity', blobname[blob], nApertures=nApertures, radius=ap_radius_arcsec[r], band=midname[blob], cuts='n', filetype='.png')
+      ; plotsave, saveanyplots, namestring
+      ;
+  ; blue no cuts 
+      ; namestring = titlemaker('overdensity', blobname[blob], nApertures=nApertures, radius=ap_radius_arcsec[r], band=bluename[blob], cuts='n', filetype='.png')
+      ; plotsave, saveanyplots, namestring
+      ;
+  ; red cuts 
+      ; namestring = titlemaker('overdensity', blobname[blob], nApertures=nApertures, radius=ap_radius_arcsec[r], band=redname[blob], cuts='y', filetype='.png')
+      ; plotsave, saveanyplots, namestring
+      ;
+  ; mid cuts 
+      ; namestring = titlemaker('overdensity', blobname[blob], nApertures=nApertures, radius=ap_radius_arcsec[r], band=midname[blob], cuts='y', filetype='.png')
+      ; plotsave, saveanyplots, namestring
+      ;
+  ; blue cuts 
+      ; namestring = titlemaker('overdensity', blobname[blob], nApertures=nApertures, radius=ap_radius_arcsec[r], band=bluename[blob], cuts='y', filetype='.png')
+      ; plotsave, saveanyplots, namestring
+      ; 
+
+; statlum plot tags: 
+  ; red 
+      ; namestring = titlemaker('statlum', blobname[blob], nApertures=nApertures, radius=ap_radius_arcsec[r], band=redname[blob], filetype='.png') 
+      ; plotsave, saveanyplots, namestring
+      ;
+  ; mid  
+      ; namestring = titlemaker('statlum', blobname[blob], nApertures=nApertures, radius=ap_radius_arcsec[r], band=midname[blob], filetype='.png') 
+      ; plotsave, saveanyplots, namestring
+      ;
+  ; blue 
+      ; namestring = titlemaker('statlum', blobname[blob], nApertures=nApertures, radius=ap_radius_arcsec[r], band=bluename[blob], filetype='.png') 
+      ; plotsave, saveanyplots, namestring
+      ;
+
+; makehist plot tags: 
+  ; no cuts 
+     ; namestring = titlemaker('aphist', blobname[blob], nApertures=nApertures, radius=ap_radius_arcsec[r], cuts='n', filetype='.png)
+     ; plotsave, saveanyplots, namestring
+     ;
+  ; cuts 
+     ; namestring = titlemaker('aphist', blobname[blob], nApertures=nApertures, radius=ap_radius_arcsec[r], cuts='y', filetype='.png)
+     ; plotsave, saveanyplots, namestring
+     ; 
+
+; rmultirad plot tags: 
+  ; red no cuts 
+        ; namestring = titlemaker('Rmultirad', blobname[blob], nApertures=nApertures, band=redname[blob], cuts='n', filetype='.png')
+        ; plotsave, saveanyplots, namestring
+  ; mid no cuts
+        ; namestring = titlemaker('Rmultirad', blobname[blob], nApertures=nApertures, band=midname[blob], cuts='n', filetype='.png')
+        ; plotsave, saveanyplots, namestring
+  ; blue no cuts 
+        ; namestring = titlemaker('Rmultirad', blobname[blob], nApertures=nApertures, band=bluename[blob], cuts='n', filetype='.png')
+        ; plotsave, saveanyplots, namestring
+  ; red cuts 
+        ; namestring = titlemaker('Rmultirad', blobname[blob], nApertures=nApertures, band=redname[blob], cuts='y', filetype='.png')
+        ; plotsave, saveanyplots, namestring
+  ; mid cuts 
+        ; namestring = titlemaker('Rmultirad', blobname[blob], nApertures=nApertures, band=midname[blob], cuts='y', filetype='.png')
+        ; plotsave, saveanyplots, namestring
+  ; blue cuts 
+        ; namestring = titlemaker('Rmultirad', blobname[blob], nApertures=nApertures, band=bluename[blob], cuts='y', filetype='.png')
+        ; plotsave, saveanyplots, namestring  
+
+; rmultimag plot tags: 
+  ; red no cuts 
+        ; namestring = titlemaker('Rmultimag', blobname[blob], nApertures=nApertures, band=redname[blob], cuts='n', filetype='.png')
+        ; plotsave, saveanyplots, namestring
+  ; mid no cuts 
+        ; namestring = titlemaker('Rmultimag', blobname[blob], nApertures=nApertures, band=midname[blob], cuts='n', filetype='.png')
+        ; plotsave, saveanyplots, namestring
+  ; blue no cuts 
+        ; namestring = titlemaker('Rmultimag', blobname[blob], nApertures=nApertures, band=bluename[blob], cuts='n', filetype='.png')
+        ; plotsave, saveanyplots, namestring
+  ; red cuts 
+        ; namestring = titlemaker('Rmultimag', blobname[blob], nApertures=nApertures, band=redname[blob], cuts='y', filetype='.png')
+        ; plotsave, saveanyplots, namestring
+  ; mid cuts 
+        ; namestring = titlemaker('Rmultimag', blobname[blob], nApertures=nApertures, band=midname[blob], cuts='y', filetype='.png')
+        ; plotsave, saveanyplots, namestring
+  ; blue cuts 
+        ; namestring = titlemaker('Rmultimag', blobname[blob], nApertures=nApertures, band=bluename[blob], cuts='y', filetype='.png')
+        ; plotsave, saveanyplots, namestring
+
+
+
+PRO galbinning, brightestmag, dimmestmag, binsize, ra, dec, radius, data, maglist, galaxies_binned
+ FORWARD_FUNCTION get_galaxies_binned
+  maglist=list()
+  FOR mag=brightestmag, dimmestmag, binsize DO BEGIN
+    galaxies_binned = get_galaxies_binned(ra, dec, radius, data, mag, mag+binsize)
+    maglist.Add, galaxies_binned
+  ENDFOR 
+END 
+
+  blob_ngal_binned = dblarr(nbins)
+  blob_ngalerr_binned = dblarr(nbins) 
+
+
+
+PRO get_ngal_binned, nbins, galaxy_maglist, ngal_binned, ngalerr_binned
+FORWARD_FUNCTION Poisson_error
+  FOR i=0, nbins-1. DO BEGIN
+    bin = galaxy_maglist[i]
+    IF (bin[0] EQ -1) THEN ngal = 0. ELSE ngal = n_elements(bin) 
+    blob_ngal_binned[i] = ngal 
+    blob_ngalerr_binned[i] = Poisson_error(ngal) 
+  ENDFOR 
+END 
+
+
+PRO densitycalc, ngal_binned, ngalerr_binned, radius, densities, density_errors 
+  densities = double(ngal_binned)/(!dPI*radius^2.) 
+  density_errors = double(ngalerr_binned)/(!dPI*radius^2.)
+END 
+
+
+
+
+
+
+; ; fix this shit
+;  IF (saveanyplots EQ 'y') THEN BEGIN 
+;    histquestion = ''
+;    READ, histquestion, PROMPT='Make histograms? (y/n)'
+;    IF (histquestion EQ 'y') THEN BEGIN 
+;      ; now look within each individual magnitude bin 
+;      FOR i=0, nbins-1 DO BEGIN
+;        n_in_aps = fltarr(nApertures)
+;        n_in_aps[*] = ap_numbers_corrected[i,*]
+;        checker = WHERE(n_in_aps NE 0, /null)
+;        IF (checker NE !null) THEN BEGIN
+;          window, 0, retain=2, xsize=1200, ysize=1000
+;          title = 'Galaxy Number Density in Apertures for Galaxies between Magnitudes ' + string(mags[i], format='(F4.1)') + ' and ' + string(mags[i]+binsize, format='(F4.1)') + ' for ' + blobname[blob] + ', no cuts'
+;          plothist, n_in_aps, background=255, color=0, xtitle='n galaxies in aperture', ytitle='number of apertures', title=title, axiscolor=0, bin=1, xrange=[0,50], /xstyle
+;          blobgaltext = 'blob: ' + string(fix(blob_ngal_binned[i])) + ' galaxies in this bin'
+;          xyouts, 30., nApertures/10., blobgaltext, color=0, charsize=1.5
+;          saveplot = ''
+;          READ, saveplot, PROMPT='Save this plot? (y/n)'
+;          IF (saveplot EQ 'y') THEN BEGIN 
+;           namestring = string(blobname[blob]) + '_' + apsnamesave + '_' + ap_radius_strings[r] + string(mags[i], format='(F4.1)') + '_aphist.png'
+;           write_png, namestring, tvrd(/true) 
+;          ENDIF 
+;          wdelete, 0
+;        ENDIF ELSE print, "no apertures contain any galaxies with magnitudes between ", string(mags[i], format='(F4.1)'), " and ", string(mags[i]+binsize, format='(F4.1)'), ' without cuts'
+;        ; now do the same for the cuts 
+;        n_in_aps_cuts = fltarr(nApertures)
+;        n_in_aps_cuts[*] = ap_numbers_corrected_cuts[i,*]
+;        checker = WHERE(n_in_aps_cuts NE 0, /null)
+;        IF (checker NE !null) THEN BEGIN
+;          window, 0, retain=2, xsize=1200, ysize=1000
+;          title = 'Galaxy Number Density in Apertures for Galaxies between Magnitudes ' + string(mags[i], format='(F4.1)') + ' and ' + string(mags[i]+binsize, format='(F4.1)') + ' for ' + blobname[blob] + ', with cuts'
+;          plothist, n_in_aps_cuts, background=255, color=0, xtitle='n galaxies in aperture', ytitle='number of apertures', title=title, axiscolor=0, bin=1, xrange=[0,50], /xstyle
+;          blobgaltext = 'blob: ' + string(fix(blob_ngal_binned_cuts[i])) + ' galaxies in this bin'
+;          xyouts, 30., nApertures/10., blobgaltext, color=0, charsize=1.5
+;          saveplot = ''
+;          READ, saveplot, PROMPT='Save this plot? (y/n)'
+;          IF (saveplot EQ 'y') THEN BEGIN 
+;           namestring = string(blobname[blob]) + '_' + apsnamesave + '_' + ap_radius_strings[r] + string(mags[i], format='(F4.1)') + '_aphist_cuts.png'
+;           write_png, namestring, tvrd(/true) 
+;          ENDIF 
+;          wdelete, 0
+;        ENDIF ELSE print, "no apertures contain any galaxies with magnitudes between ", string(mags[i], format='(F4.1)'), " and ", string(mags[i]+binsize, format='(F4.1)'), ' with cuts'
+;      ENDFOR
+;    ENDIF   ; user wanted to make histograms 
+;  ENDIF   ; user wants to save at least some plots
+;; end of shit that needs fixing
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
