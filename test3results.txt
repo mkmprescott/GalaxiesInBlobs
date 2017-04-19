@@ -1,0 +1,39 @@
+GOODS-S FIELD ANALYSIS
+
+
+
+       11487       14012
+KEEPING aperture  2 with bad/total pixel ratio of  0.00000
+       53.100388      -27.748212
+
+       10121        9989
+KEEPING aperture  3 with bad/total pixel ratio of  0.00000
+       53.126115      -27.815264
+
+       11487       14012
+KEEPING aperture  4 with bad/total pixel ratio of  0.00000
+       53.100388      -27.748212
+
+
+
+
+
+        7731        7134
+KEEPING aperture  7 with bad/total pixel ratio of  0.00000
+       53.171173      -27.862839
+
+
+
+        5488        6730
+KEEPING aperture  9 with bad/total pixel ratio of  0.00000
+       53.213464      -27.869551
+
+
+
+Thrown out: 
+1:       19722        8803
+5:       16124        8521
+6:       22027        4784
+8:        9796       19133
+
+2 & 4 (or "1" and "3") are identical again! wtf

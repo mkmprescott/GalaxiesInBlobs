@@ -1,0 +1,100 @@
+GOODS-S FIELD ANALYSIS
+TEST 4: 20 apertures, printing ap_x and ap_y
+  (RA & Dec were also printed, but they matched up with the coordinates just fine, so no problems, so I erased them)
+
+Info below is 
+ap #       ap_x       ap_y     "pattern number" if this is a repeated coordinate
+
+KEPT:
+
+2:         7731        7134      C
+ 
+3:         5488        6730
+ 
+4:         7731        7134      C
+ 
+5:         8196       14333
+ 
+6:        16494       15503
+ 
+8:         7525       10815       D
+ 
+9:         5547        6551                  NOTE: bad/total pixel ratio = 1.14658e-05
+ 
+10:        7525       10815       D
+ 
+11:       12439       10278
+ 
+12:       11821       17990                  NOTE: bad/total pixel ratio = 0.572166
+ 
+18:        5818        4108    A             NOTE: bad/total pixel ratio = 0.745483       
+ 
+21:        3661        5081     B            NOTE: bad/total pixel ratio = 0.238362        
+ 
+26:        5818        4108    A             NOTE: bad/total pixel ratio = 0.745483       
+ 
+28:        3661        5081     B            NOTE: bad/total pixel ratio = 0.238362        
+ 
+32:        5818        4108    A             NOTE: bad/total pixel ratio = 0.745483       
+ 
+33:        3661        5081     B            NOTE: bad/total pixel ratio = 0.238362        
+
+36:        5818        4108    A             NOTE: bad/total pixel ratio = 0.745483       
+ 
+40:        2701        6518        E
+
+42:        5818        4108    A             NOTE: bad/total pixel ratio = 0.745483       
+ 
+45:        2701        6518        E
+
+unique: 3, 5, 6, 9, 11, 12
+ --> only 6 out 20 aren't repeated! 5 sets of repeated coordinates --> only 11 out of 20 apertures are "real" 
+
+
+
+THROWN OUT: 
+
+non-repeated:
+1:        22027        4784
+7:        17843        4835
+13:       20709        6264
+19:        7194        1734
+37:       19541       14935
+
+
+repeated (with patterns emphasized):
+14:        1973       19092
+15:       15298        3199
+16:        5831       16977
+17:       17187       16786
+
+20:       21979       13295
+
+22:        1973       19092
+23:       15298        3199
+24:        5831       16977
+25:       17187       16786
+
+27:       21979       13295
+29:       15298        3199
+30:        5831       16977
+31:       17187       16786
+
+34:        5831       16977
+
+35:       17187       16786
+38:       19321        5070
+39:        4709         518
+
+41:       17187       16786
+43:       19321        5070
+44:        4709         518
+
+So lots of repeated apertures getting thrown out, too... 
+
+WHY????
+
+Something has to be wrong with these lines: 
+       ap_x = floor(ap_radius_pix + (double(npix_x)-2.*ap_radius_pix)*randomu(seed))
+       ap_y = floor(ap_radius_pix + (double(npix_y)-2.*ap_radius_pix)*randomu(seed)) 
+But what??????
