@@ -32,8 +32,13 @@
                                                           `\ /'
                                                             V
 
-
-
+       FILTERS:    RED      MIDDLE      BLUE      ALTBLUE
+OBJECT:
+PRG1               F140W    F814W       F475W     none
+PRG2               F140W    F814W       F606W     none
+PRG3               F140W    F814W       F475W     none
+GOODS-S            F140W    F814W       F606W     F435W
+GOODS-N            F140W    F775W       F606W     F435W 
 
 
 

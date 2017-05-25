@@ -12,42 +12,42 @@
 
 
 
-  PRO colordiagram, blobgals, fieldgals, datared, datamid, datablue, redname, midname, bluename, m, b, cap, blobname, radius                                             ;;
-  ;-------------------------------------------------------------------------------------------------------------------------------------------------;                     ;
-  ; colordiagram procedure                                                                                                                          ;                     ;
-  ;   description                                                                                                                                   ;                     ;************
-  ; INPUTS: etc                                                                                                                                     ;                     ;
-  ;         etc                                                                                                                                     ;                     ;
-  ; NOTES:                                                                                                                                          ;                     ;
-  ;-------------------------------------------------------------------------------------------------------------------------------------------------;                     ;
-   FORWARD_FUNCTION titlemaker                                                                                                                                           ;;
-   ; separate out the magnitudes to define colors                                                                                                                         ;
-      redmags = datared[blobgals].MAG_ISO                                                                                                                                ;;
-      midmags = datamid[blobgals].MAG_ISO                                                                                                                                ;;
-      bluemags = datablue[blobgals].MAG_ISO                                                                                                                              ;;
-      field_redmags = datared[fieldgals].MAG_ISO                                                                                                                         ;;
-      field_midmags = datamid[fieldgals].MAG_ISO                                                                                                                         ;;
-      field_bluemags = datablue[fieldgals].MAG_ISO                                                                                                                       ;;
-   ; make the colors                                                                                                                                                      ;
-      color_x = bluemags - midmags                                                                                                                                       ;;
-      color_y = midmags - redmags                                                                                                                                        ;;
-      field_color_x = field_bluemags - field_midmags                                                                                                                     ;;
-      field_color_y = field_midmags - field_redmags                                                                                                                      ;;
-   ; make the plot                                                                                                                                                        ;
-     ; set up titles for plot and axes                                                                                                                                    ;
-        title = titlemaker('colors', blobname, radius=radius)                                                                                                            ;;
-        xtitle = bluename + ' - ' + midname                                                                                                                              ;;
-        ytitle = midname + ' - ' + redname                                                                                                                               ;;
-     plot, color_x, color_y, background=255, color=0, title=title, xtitle=xtitle, ytitle=ytitle, psym=8, xrange=[-5,5],/xstyle, yrange=[-5,5],/ystyle, charsize=1.5, $   ;; 
-        thick=2, ymargin=[4,4]                                                                                                                                           ;;
-     oplot, field_color_x, field_color_y, color=0, psym=3                                                                                                                ;;
-     LEGEND, ['blob galaxy','field galaxy'], /left, /top, color=0, textcolor=0, psym=[8,3], charsize=1, charthick=1, /box, outline_color=0                               ;;
-   ; add the cut line                                                                                                                                                     ;
-      xvalues = 0.01*findgen(100000) - 500.                                                                                                                              ;;
-      cut = xvalues*m + b                                                                                                                                                ;;
-      cut[WHERE(cut GT cap)] = cap                                                                                                                                       ;;
-      oplot, xvalues, cut, color=50, linestyle=2, thick=2                                                                                                                ;;
-  END                                                                                                                                                                    ;; 
+  PRO colordiagram, blobgals, fieldgals, datared, datamid, datablue, redname, midname, bluename, m, b, cap, blobname, radius                                               
+  ;-------------------------------------------------------------------------------------------------------------------------------------------------;
+  ; colordiagram procedure                                                                                              
+  ;   description                                                                 
+  ; INPUTS: etc                                                                                          
+  ;         etc                                                                                         
+  ; NOTES:                                                                              
+  ;-------------------------------------------------------------------------------------------------------------------------------------------------;
+   FORWARD_FUNCTION titlemaker                                                                                                                                             
+   ; separate out the magnitudes to define colors  
+      redmags = datared[blobgals].MAG_ISO                                                                                                                                  
+      midmags = datamid[blobgals].MAG_ISO                                                                                                                                  
+      bluemags = datablue[blobgals].MAG_ISO                                                                                                                                
+      field_redmags = datared[fieldgals].MAG_ISO                                                                                                                           
+      field_midmags = datamid[fieldgals].MAG_ISO                                                                                                                           
+      field_bluemags = datablue[fieldgals].MAG_ISO                                                                                                                         
+   ; make the colors  
+      color_x = bluemags - midmags                                                                                                                                         
+      color_y = midmags - redmags                                                                                                                                          
+      field_color_x = field_bluemags - field_midmags                                                                                                                       
+      field_color_y = field_midmags - field_redmags                                                                                                                        
+   ; make the plot  
+     ; set up titles for plot and axes 
+        title = titlemaker('colors', blobname, radius=radius)                                                                                                              
+        xtitle = bluename + ' - ' + midname                                                                                                                                
+        ytitle = midname + ' - ' + redname                                                                                                                                 
+     plot, color_x, color_y, background=255, color=0, title=title, xtitle=xtitle, ytitle=ytitle, psym=8, xrange=[-5,5],/xstyle, yrange=[-5,5],/ystyle, charsize=1.5, $      
+        thick=2, ymargin=[4,4]                                                                                                                                             
+     oplot, field_color_x, field_color_y, color=0, psym=3                                                                                                                  
+     LEGEND, ['blob galaxy','field galaxy'], /left, /top, color=0, textcolor=0, psym=[8,3], charsize=1, charthick=1, /box, outline_color=0                                 
+   ; add the cut line   
+      xvalues = 0.01*findgen(100000) - 500.                                                                                                                                
+      cut = xvalues*m + b                                                                                                                                                  
+      cut[WHERE(cut GT cap)] = cap                                                                                                                                         
+      oplot, xvalues, cut, color=50, linestyle=2, thick=2                                                                                                                  
+  END                                                                                                                                                                       
 
 
 
