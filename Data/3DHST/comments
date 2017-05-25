@@ -1,3 +1,18 @@
 On Agnar's computer, this folder contains all the raw 3D-HST data downloaded from the 3D-HST website. 
-While Agnar would very much like to back them up onto Github, most of the files have sizes on the order
- of GiB, making it impossible to upload them here. This includes the following:
+While Agnar would very much like to back up that data onto Github, most of the files have sizes greater 
+  than 25 MiB, making it impossible to upload them here. This includes everything in the following folders: 
+  
+AEGIS
+COSMOS
+GOODSN*
+GOODSS*
+UDS
+3DHSTimages*
+3DHST_MASTER
+CSVcatalogs
+
+Folders marked with asterisks are ones that contain files currently used by LIONS. (The CSVcatalogs
+  folder might also fall into this category, but Agnar doesn't remember. It probably doesn't.) 
+There is one folder that contains files small enough to put onto GitHub, but unfortunately it isn't
+  useful for LIONS analysis and probably never will be: the psfs folder. Because it isn't useful, it
+  will not be uploaded here. 
