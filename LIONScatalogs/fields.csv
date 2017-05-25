@@ -1,0 +1,4 @@
+FIELDNAME, STACK, MASK, PIXELSCALE, CATALOG
+# note that GOODS-S pixel scale is 0.06"/px, but I've also seen 0.128"/px for it?
+GOODS-S,/boomerang-data/alhall/GalaxiesInBlobs/Data/3DHST/3DHSTimages/stacks/goodss_3dhst.v4.0.F125W_F140W_F160W_det.fits,/boomerang-data/alhall/GalaxiesInBlobs/Data/3DHST/3DHSTimages/masks/GOODS-S_area.fits,0.06,goodss.fits
+GOODS-N,/boomerang-data/alhall/GalaxiesInBlobs/Data/3DHST/3DHSTimages/stacks/goodsn_3dhst.v4.0.F125W_F140W_F160W_orig_det.fits,/boomerang-data/alhall/GalaxiesInBlobs/Data/3DHST/3DHSTimages/masks/GOODS-N_area.fits,0.06,goodsn.fits
