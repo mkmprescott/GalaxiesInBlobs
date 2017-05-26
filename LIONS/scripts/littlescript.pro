@@ -18,6 +18,9 @@ cuttype = 'z'
 z=3.157
 zerr=0.15
 zstring='3p075'
+histnameA = 'GOODSS_10arcsec_10000aps_ngals'
+histnameB = 'GOODSN_10arcsec_10000aps_ngals'
+histnamebin = 'GOODSS_10arcsec_10000aps_ngals_mag25'
 
 ;   ; get galaxy IDs in blobs and random field apertures 
 ;   blobsampling, ap_radius_arcsec, blobFITSname
@@ -45,6 +48,11 @@ zstring='3p075'
 ;;;   densityplot, densityFITSnameA, magband, 0                     ;, indicestoplot=[0,12], autosave='y'
 ;   densityFITSnameB = densityFITSname+'_z'+zstring+ '_' + band    ; because density procedure alters the filename it's given 
 ;   densityplot, densityFITSnameB, magband, 0                     ;, indicestoplot=[0,12], autosave='y'
+
+   ; make histograms 
+   makehist, 'allblobs_galcounts_10arcsec', 'GOODSSaps_galcounts_10arcsec_10000aps', histnameA, 1
+   makehist, 'allblobs_galcounts_10arcsec', 'GOODSNaps_galcounts_10arcsec_10000aps', histnameB, 1
+   makehist, 'allblobs_galcounts_10arcsec', 'GOODSSaps_galcounts_10arcsec_10000aps', histnamebin, 1, magbin=25.
 
 
 ; remember, to call this, inside IDL type:  @littlescript
