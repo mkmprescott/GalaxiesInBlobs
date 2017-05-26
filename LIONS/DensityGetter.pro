@@ -311,7 +311,7 @@ PRO countgals, FITSname, brightestmag, dimmestmag, binsize, outputname, cuttype=
       ; now get number of galaxies in each bin to fill in 'galcounts' array 
       FOR mag=brightestmag, dimmestmag, binsize DO BEGIN                                       ; loop through the magnitude bins 
         index = WHERE(mags EQ mag)                                                               ; the array index for this magnitude bin
-        countstruct(ap).galcounts[index] = bin_galaxies(mag, mag+binsize, apertures.galmags)     ; put number of galaxies in this bin into corresponding index of galcounts array
+        countstruct(ap).galcounts[index] = bin_galaxies(mag, mag+binsize, apertures(ap).galmags)   ; put number of galaxies in this bin into corresponding index of galcounts array
       ENDFOR                                                                                   ; all magnitude bins 
     ENDELSE                                                                             ; if this aperture contained at least one galaxy
   ENDFOR                                                                             ; every aperture in the input structure

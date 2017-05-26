@@ -3,14 +3,13 @@
 ;  Contains all modules used for making plots regarding the galaxy number density in blobs and in fields. 
 ;  CONTENTS: 
 ;      densityplot------------------------procedure
-;      statlum----------------------------procedure
 ;      makehist---------------------------procedure
+;      statlum----------------------------procedure
 ;      zhist------------------------------procedure
 ;      Rmultirad--------------------------procedure
 ;      Rmultimag--------------------------procedure
 ;      makereg----------------------------procedure  ???????????
 ;      plotsave---------------------------procedure 
-;      titlemaker-------------------------function  ?????????????
 ;------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------;
 
 
@@ -165,25 +164,95 @@ END          ; of densityplot procedure
 
 
 
-PRO makehist, blobsfile, fieldapsfile,              magband, windownumber, bin=bin, indicestoplot=indicestoplot, autosave=autosave             ;ap_totals, blob_ngal,
-;-------------------------------------------------------------------------------------------------------------------------------------------------;
+PRO makehist, blobsfile, fieldapsfile, outputname, windownumber, magbin=magbin, magband=magband, autosave=autosave
+;----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------; 
 ; makehist procedure                                                                
-;   description                                                                            
-; INPUTS: etc                                                                                  
-;         etc                                                                     
-; NOTES:                                                                            
-;-------------------------------------------------------------------------------------------------------------------------------------------------;
-  FORWARD_FUNCTION titlemaker           ; this function is used in this procedure                      
+;   description 
+;
+; INPUT: blobfile -
+;        fieldapsfile - 
+;        outputname - 
+;        windownumber - an integer specifying a unit number for the plot window (in case user wants to run this code multiple times and see all plots side-by-side) 
+;        --
+;        magbin - 
+;        magband - an optional string giving the magnitude band being used to bin the galaxies, for labeling the plot's x-axis if the 'bin' keyword is set
+;        autosave - an optional string keyword specifying whether or not to automatically save the histogram; must be set to 'y' to save the plot automatically; the plot will
+;                          not be saved automatically if this keyword is not set or is set to except 'y' 
+;
+; OUTPUT: 
+;
+; Uses the plotsave procedure. 
+;                                                                            
+;----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------; 
+  path = '/boomerang-data/alhall/GalaxiesInBlobs/LIONScatalogs/galcounts/'       ; string giving the full path to the input files 
+  blobaps = mrdfits(path+blobsfile+'.fits', 1)                                   ; read the blobs file into a structure
+  fieldaps = mrdfits(path+fieldapsfile+'.fits', 1)                               ; read the field file into a structure 
+  nblobs = n_elements(blobaps)
+  nfieldaps = n_elements(fieldaps)
+  aptotals = fltarr(nfieldaps)                                        ; make an array to hold the number of galaxies for each aperture to be plotted 
+  blobtotals = fltarr(nblobs)                                         ; make an array to hold the number of galaxies in each blob for comparison 
+
+;print, 'blob counts:'
+;print, blobaps(0).name, blobaps(0).galcounts
+;print, blobaps(1).name, blobaps(1).galcounts
+;print, blobaps(2).name, blobaps(2).galcounts
+;print, blobaps(3).name, blobaps(3).galcounts
+;print, blobaps(4).name, blobaps(4).galcounts
+;print, blobaps(5).name, blobaps(5).galcounts
+;print, blobaps(6).name, blobaps(6).galcounts
+;print, blobaps(7).name, blobaps(7).galcounts
+;print, blobaps(8).name, blobaps(8).galcounts
+;print, blobaps(9).name, blobaps(9).galcounts
+;print, blobaps(10).name, blobaps(10).galcounts
+;print, blobaps(11).name, blobaps(11).galcounts
+;print, 'some field counts:'
+;print, fieldaps(0).name, fieldaps(0).galcounts
+;print, fieldaps(4).name, fieldaps(4).galcounts
+
+  IF (n_elements(magbin) NE 0) THEN BEGIN
+    binindex = WHERE(fieldaps(0).mags EQ magbin, match) 
+    IF (match EQ 1) THEN BEGIN
+      FOR blob=0, nblobs-1 DO BEGIN
+        blobtotals[blob] = float(blobaps(blob).galcounts[binindex]) / blobaps(blob).weight
+      ENDFOR
+      FOR ap=0, nfieldaps-1 DO BEGIN
+        aptotals[ap] = float(fieldaps(ap).galcounts[binindex]) / fieldaps(ap).weight
+      ENDFOR
+    ENDIF ELSE IF (match EQ 0) THEN BEGIN 
+      print, 'Specified magnitude bin does not exist. Using total in all bins.'
+      FOR blob=0, nblobs-1 DO BEGIN
+        blobtotals[blob] = float( total(blobaps(blob).galcounts) ) / blobaps(blob).weight
+      ENDFOR
+      FOR ap=0, nfieldaps-1 DO BEGIN
+        aptotals[ap] = float( total(fieldaps(ap).galcounts) ) / fieldaps(ap).weight
+      ENDFOR
+    ENDIF 
+  ENDIF ELSE BEGIN 
+      FOR blob=0, nblobs-1 DO BEGIN
+        blobtotals[blob] = float( total(blobaps(blob).galcounts) ) / blobaps(blob).weight
+      ENDFOR
+      FOR ap=0, nfieldaps-1 DO BEGIN
+        aptotals[ap] = float( total(fieldaps(ap).galcounts) ) / fieldaps(ap).weight
+      ENDFOR
+  ENDELSE 
+
   ; set up titles for plot and axes                                                                    
-    title = titlemaker('aphist', blobname, nApertures=nApertures, radius=radius, cuts=cuts)         
-    xtitle = 'n galaxies in aperture'                                                 
-    ytitle='number of apertures'                                                      
-  plothist, ap_totals, background=255, color=0, axiscolor=0, title=title, xtitle=xtitle, ytitle=ytitle, bin=1, xrange=[0,blob_ngal+10.],/xstyle, charsize=1.5, $
-    thick=2, ymargin=[4,4]                                                             
-  oplot, [blob_ngal, blob_ngal], [0., nApertures], linestyle=2, thick=2, color=0.      
-  LEGEND, ['blob','field'], /center, /top, color=0, textcolor=0, linestyle=[0,2], thick=2., charsize=1, /box, outline_color=0.,number=0.1, charthick=1.5
-; xyouts, blob_ngal+1., nApertures/10., blobgaltext, color=0, charsize=1.5                            
-END   
+    title = 'Characterizing Probability of Overdensity in Non-Blob Apertures'
+    xtitle = 'n galaxies in aperture' 
+    ytitle='number of apertures' 
+  window, windownumber, retain=2, xsize=1000., ysize=700.
+  plothist, aptotals, bin=1., background=255, color=0, axiscolor=0, title=title, xtitle=xtitle, ytitle=ytitle, xrange=[0,100.],/xstyle, charsize=1.5, thick=2, ymargin=[4,4] 
+  FOR blob=0, nblobs-1 DO BEGIN         ; add a line for each blob showing the number of galaxies in its aperture 
+    blob_ngal = blobtotals[blob] 
+    oplot, [blob_ngal, blob_ngal], [0., nfieldaps], linestyle=2, thick=2, color=0. 
+;  LEGEND, ['blob','field'], /center, /top, color=0, textcolor=0, linestyle=[0,2], thick=2., charsize=1, /box, outline_color=0.,number=0.1, charthick=1.5
+    xyouts, blob_ngal+1., (200.*(blob+1.)), blobaps(blob).name, color=0, charsize=1.5 
+  ENDFOR                                                ; all the blobs 
+
+  plotsave, '/boomerang-data/alhall/GalaxiesInBlobs/BestPlots/Histograms/' + outputname + '.png' 
+
+
+END                                                   ; of makehist procedure 
 
 
 
