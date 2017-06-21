@@ -3,12 +3,12 @@
 ;  Contains all modules used for making plots regarding the galaxy number density in blobs and in fields. 
 ;  CONTENTS: 
 ;      densityplot------------------------procedure
-;      makehist---------------------------procedure
-;      statlum----------------------------procedure
-;      zhist------------------------------procedure
-;      Rmultirad--------------------------procedure
-;      Rmultimag--------------------------procedure
-;      makereg----------------------------procedure  ???????????
+;      aphist-----------------------------procedure
+;      statlum----------------------------procedure        in progress 
+;      zhist------------------------------procedure        in progress
+;      Rmultirad--------------------------procedure        in progress
+;      Rmultimag--------------------------procedure        in progress
+;      makereg----------------------------procedure        in progress 
 ;      plotsave---------------------------procedure 
 ;------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------;
 
@@ -16,7 +16,7 @@
 
 
 PRO densityplot, file, magband, windownumber, indicestoplot=indicestoplot, autosave=autosave
-;----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------; 
+;---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------; 
 ; densityplot procedure
 ;   Makes plots of galaxy number density vs magnitude for a user-specified blob and overplots the galaxy density in the field for comparison.
 ;
@@ -27,14 +27,14 @@ PRO densityplot, file, magband, windownumber, indicestoplot=indicestoplot, autos
 ;                          index of the data structure to use for the blob, and the second should be the index of the data structure to use for the field; if this keyword
 ;                          isn't set, the code will ask the user to select a blob and field  
 ;         autosave - an optional string keyword specifying whether or not to automatically save the density plot; must be set to 'y' to save the plot automatically; the plot will
-;                          not be saved automatically if this keyword is not set or is set to except 'y' 
+;                          not be saved automatically if this keyword is not set or is set to anything except 'y' 
 ;
 ; OUTPUT: a plot of galaxy number density vs magnitude with error bars for the blob superimposed on a gray swath showing the 1-sigma galaxy density range for the field; 
 ;          this can be saved as a PNG by the user under the same name as the FITS file specified by "file" (with the name of the blob added on)  
 ;
 ; Uses the plotsave procedure. 
 ;
-;----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------; 
+;---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------; 
 
   ; SETUP 
      plotsym, 0, 1, /fill            ; plotting symbol: make the psym=8 symbol a filled circle for our plots 
@@ -125,7 +125,7 @@ PRO densityplot, file, magband, windownumber, indicestoplot=indicestoplot, autos
     ; open a window for the plot 
        window, windownumber, retain=2, xsize=700, ysize=550
     ; plot the data                                                                                                                      
-       ;     ; data          ; plot colors and symbols         ; text labels with large font                                                ; wide margins                      
+       ;     | data          | plot colors and symbols         | text labels with large font                                                | wide margins                      
        plot, mags, Bdensity, background=255, color=0, psym=-8, title=plottitle, xtitle=xtitle, ytitle=ytitle, charsize = 2.5, charthick=2., xmargin=[8,3], ymargin=[4,2.5], $ 
              xrange=[22.5,29.5], /xstyle, yrange=[1d3,3d6], /ystyle, /ylog               ; how axes are numbered                
        polyfill, xpoints, ypoints, color=200, clip=[22.5,1d3,29.5,3d6], /data, noclip=0     ; overplot gray swath showing field density uncertainty 
@@ -133,7 +133,7 @@ PRO densityplot, file, magband, windownumber, indicestoplot=indicestoplot, autos
        errplot, mags, Bdensity-Berr, Bdensity+Berr, color=0, thick=3                        ; overplot error bars on the blob points
        oplot, mags, Bdensity, psym=-8, color=0, thick=3                                     ; have to plot blob density again because polyfill covers it up   
     ; make a legend showing what represents the blob and what represents the field 
-       ;       ; labels         ; properties of legend lines                             ; properties of legend text              ; location and properties of legend box  
+       ;       | labels         | properties of legend lines                             | properties of legend text              | location and properties of legend box  
        LEGEND, [Blabel,Flabel], color=[0,0], linestyle=[0,2], thick=[3.,3.], number=0.1, textcolor=0, charsize=1.5, charthick=2., /left, /top, /box, outline_color=0. 
     ; redraw the axes to ensure they're visible 
        axis, color=0, xaxis=0, xrange=[22.5,29.5], /xstyle, /data, xtickformat="(A1)", xthick=2, charsize=4, charthick=2.                    ; bottom x axis (has labels) 
@@ -143,16 +143,18 @@ PRO densityplot, file, magband, windownumber, indicestoplot=indicestoplot, autos
 
   ; SAVE THE PLOT 
      savefile = '/boomerang-data/alhall/GalaxiesInBlobs/' + nameofblob + '_' + file + '.png'   ; add the full path onto the filename where the plot will be saved 
-     IF (n_elements(autosave) NE 0) THEN BEGIN                            ; check if user has a preference on whether or not to save the plot automatically
-       IF (autosave EQ 'y') THEN BEGIN                                       ; autosave has to be set to 'y' in order to save the plot automatically
-         write_png, savefile, tvrd(/true)                                       ; write the plot to the PNG file specified by namestring 
-         print, 'Plot saved automatically.'                                     ; notify the user that the plot was saved
-       ENDIF ELSE BEGIN                                                      ; if autosave is set to something other than 'y',  
-         plotsave, savefile                                                     ; ask user whether or not to save plot
-       ENDELSE                                                               ; that takes care of anything autosave could've been set to
-     ENDIF ELSE BEGIN                                                     ; if the autosave keyword isn't set
-       plotsave, savefile                                                    ; ask user whether or not to save plot
-     ENDELSE                                                              ; now the plot will have been saved if so desired 
+     IF (n_elements(autosave) NE 0) THEN BEGIN                                                 ; check if user has a preference on whether or not to save the plot automatically
+       IF (autosave EQ 'y') THEN BEGIN                                                           ; autosave has to be set to 'y' in order to save the plot automatically
+         write_png, savefile, tvrd(/true)                                                          ; write the plot to the PNG file specified by namestring 
+         print, 'Plot saved automatically.'                                                        ; notify the user that the plot was saved
+       ENDIF ELSE IF (autosave EQ 'n') THEN BEGIN                                                ; if autosave is set to 'n', 
+         print, 'Plot not saved.'                                                                  ; don't save the plot and notify user that plot wasn't saved 
+       ENDIF ELSE BEGIN                                                                          ; if autosave is set to something other than 'y' or 'n',    
+         plotsave, savefile                                                                        ; ask user whether or not to save plot
+       ENDELSE                                                                                   ; that takes care of anything autosave could've been set to
+     ENDIF ELSE BEGIN                                                                          ; if the autosave keyword isn't set
+       plotsave, savefile                                                                        ; ask user whether or not to save plot
+     ENDELSE                                                                                   ; now the plot will have been saved if so desired 
 
 END          ; of densityplot procedure 
 
@@ -164,95 +166,132 @@ END          ; of densityplot procedure
 
 
 
-PRO makehist, blobsfile, fieldapsfile, outputname, windownumber, magbin=magbin, magband=magband, autosave=autosave
-;----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------; 
-; makehist procedure                                                                
-;   description 
+PRO aphist, blobsfile, fieldapsfile, fieldname, outputname, windownumber, magbin=magbin, plotblobs=plotblobs, magband=magband, autosave=autosave
+;---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------; 
+; aphist procedure                                                                
+;   Makes a histogram showing how galaxy counts in random field apertures compare to the number of galaxies in blobs. 
 ;
-; INPUT: blobfile -
-;        fieldapsfile - 
-;        outputname - 
+; INPUT: blobfile - string containing the name of a file made by the countgals procedure containing number of galaxies per mag bin in all blobs
+;        fieldapsfile - string containing the name of a file made by the countgals procedure containing number of galaxies per mag bin in random apertures in a field  
+;        fieldname - string containing the name of the field associated with fieldapsfile 
+;        outputname - string containing the name of the png that will be created by this procedure 
 ;        windownumber - an integer specifying a unit number for the plot window (in case user wants to run this code multiple times and see all plots side-by-side) 
 ;        --
-;        magbin - 
+;        magbin - optional float giving the lower bound of a magnitude bin in which to count galaxies; if not set, total number of galaxies across all bins will be used 
+;        plotblobs - optional integer or array of integers specifying the indices in the blob aperture file to plot when overplotting blobs; if unspecified, all blobs are shown 
 ;        magband - an optional string giving the magnitude band being used to bin the galaxies, for labeling the plot's x-axis if the 'bin' keyword is set
 ;        autosave - an optional string keyword specifying whether or not to automatically save the histogram; must be set to 'y' to save the plot automatically; the plot will
-;                          not be saved automatically if this keyword is not set or is set to except 'y' 
+;                          not be saved automatically if this keyword is not set or is set to anything except 'y' 
 ;
-; OUTPUT: 
+; OUTPUT: makes a histogram of the number of galaxies in random field apertures with lines showing how many galaxies are in the blobs for comparison; 
+;           saves this histogram as a png file if the user so chooses 
 ;
 ; Uses the plotsave procedure. 
 ;                                                                            
-;----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------; 
-  path = '/boomerang-data/alhall/GalaxiesInBlobs/LIONScatalogs/galcounts/'       ; string giving the full path to the input files 
-  blobaps = mrdfits(path+blobsfile+'.fits', 1)                                   ; read the blobs file into a structure
-  fieldaps = mrdfits(path+fieldapsfile+'.fits', 1)                               ; read the field file into a structure 
-  nblobs = n_elements(blobaps)
-  nfieldaps = n_elements(fieldaps)
-  aptotals = fltarr(nfieldaps)                                        ; make an array to hold the number of galaxies for each aperture to be plotted 
-  blobtotals = fltarr(nblobs)                                         ; make an array to hold the number of galaxies in each blob for comparison 
+;---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------; 
 
-;print, 'blob counts:'
-;print, blobaps(0).name, blobaps(0).galcounts
-;print, blobaps(1).name, blobaps(1).galcounts
-;print, blobaps(2).name, blobaps(2).galcounts
-;print, blobaps(3).name, blobaps(3).galcounts
-;print, blobaps(4).name, blobaps(4).galcounts
-;print, blobaps(5).name, blobaps(5).galcounts
-;print, blobaps(6).name, blobaps(6).galcounts
-;print, blobaps(7).name, blobaps(7).galcounts
-;print, blobaps(8).name, blobaps(8).galcounts
-;print, blobaps(9).name, blobaps(9).galcounts
-;print, blobaps(10).name, blobaps(10).galcounts
-;print, blobaps(11).name, blobaps(11).galcounts
-;print, 'some field counts:'
-;print, fieldaps(0).name, fieldaps(0).galcounts
-;print, fieldaps(4).name, fieldaps(4).galcounts
-
-  IF (n_elements(magbin) NE 0) THEN BEGIN
-    binindex = WHERE(fieldaps(0).mags EQ magbin, match) 
-    IF (match EQ 1) THEN BEGIN
-      FOR blob=0, nblobs-1 DO BEGIN
-        blobtotals[blob] = float(blobaps(blob).galcounts[binindex]) / blobaps(blob).weight
-      ENDFOR
-      FOR ap=0, nfieldaps-1 DO BEGIN
-        aptotals[ap] = float(fieldaps(ap).galcounts[binindex]) / fieldaps(ap).weight
-      ENDFOR
-    ENDIF ELSE IF (match EQ 0) THEN BEGIN 
-      print, 'Specified magnitude bin does not exist. Using total in all bins.'
-      FOR blob=0, nblobs-1 DO BEGIN
-        blobtotals[blob] = float( total(blobaps(blob).galcounts) ) / blobaps(blob).weight
-      ENDFOR
-      FOR ap=0, nfieldaps-1 DO BEGIN
-        aptotals[ap] = float( total(fieldaps(ap).galcounts) ) / fieldaps(ap).weight
-      ENDFOR
-    ENDIF 
-  ENDIF ELSE BEGIN 
-      FOR blob=0, nblobs-1 DO BEGIN
-        blobtotals[blob] = float( total(blobaps(blob).galcounts) ) / blobaps(blob).weight
-      ENDFOR
-      FOR ap=0, nfieldaps-1 DO BEGIN
-        aptotals[ap] = float( total(fieldaps(ap).galcounts) ) / fieldaps(ap).weight
-      ENDFOR
-  ENDELSE 
-
-  ; set up titles for plot and axes                                                                    
-    title = 'Characterizing Probability of Overdensity in Non-Blob Apertures'
-    xtitle = 'n galaxies in aperture' 
-    ytitle='number of apertures' 
-  window, windownumber, retain=2, xsize=1000., ysize=700.
-  plothist, aptotals, bin=1., background=255, color=0, axiscolor=0, title=title, xtitle=xtitle, ytitle=ytitle, xrange=[0,100.],/xstyle, charsize=1.5, thick=2, ymargin=[4,4] 
-  FOR blob=0, nblobs-1 DO BEGIN         ; add a line for each blob showing the number of galaxies in its aperture 
-    blob_ngal = blobtotals[blob] 
-    oplot, [blob_ngal, blob_ngal], [0., nfieldaps], linestyle=2, thick=2, color=0. 
-;  LEGEND, ['blob','field'], /center, /top, color=0, textcolor=0, linestyle=[0,2], thick=2., charsize=1, /box, outline_color=0.,number=0.1, charthick=1.5
-    xyouts, blob_ngal+1., (200.*(blob+1.)), blobaps(blob).name, color=0, charsize=1.5 
-  ENDFOR                                                ; all the blobs 
-
-  plotsave, '/boomerang-data/alhall/GalaxiesInBlobs/BestPlots/Histograms/' + outputname + '.png' 
+  ; SETUP
+    ; data: 
+       path = '/boomerang-data/alhall/GalaxiesInBlobs/LIONScatalogs/galcounts/'       ; string giving the full path to the input files 
+       blobaps = mrdfits(path+blobsfile+'.fits', 1)                                   ; read the blobs file into a structure
+       fieldaps = mrdfits(path+fieldapsfile+'.fits', 1)                               ; read the field file into a structure 
+       nblobs = n_elements(blobaps)                                                   ; number of blobs in the blobs file 
+       nfieldaps = n_elements(fieldaps)                                               ; number of random apertures in the field file 
+       aptotals = fltarr(nfieldaps)                                                   ; make an array to hold the number of galaxies for each aperture to be plotted 
+       blobtotals = fltarr(nblobs)                                                    ; make an array to hold the number of galaxies in each blob for comparison 
+    ; plot: 
+       ; axes 
+       xtitle = 'n galaxies in aperture'                                              ; set up x-axis label for the histogram that will be made 
+       ytitle='number of apertures'                                                   ; set up y-axis label for the histogram that will be made 
+       ; colors 
+       loadct, 39                                                                     ; load rainbow color table 
+       colorstep = 240. / nblobs                                                      ; interval in color to get blobs' line colors evenly spaced along the color table 
+       colors = (findgen(nblobs) + 1.) * colorstep                                    ; array of color values to be used for each blob's line on the plot 
+       ; linestyles 
+       linestyle = intarr(nblobs)                                                     ; array of linestyle values to be used for each blob's line on the plot 
+       prgs = WHERE(strmatch(blobaps.name, 'PRG*', /fold_case) EQ 1.)                 ; find indices of PRG blobs in blobaps 
+       cdfss = WHERE(strmatch(blobaps.name, 'CDFS*', /fold_case) EQ 1.)               ; find indices of CDFS blobs in blobaps 
+       linestyle[prgs] = 5                                                            ; assign all PRGs the same linestyle (long dashes) 
+       linestyle[cdfss] = [3,4,3,4,3,4]                                               ; assign all CDFS blobs linestyles alternating between dash-dot and dash-dot-dot-dot 
+       pickup = cdfss[-1] + 1                                                         ; find index where other blobs besides PRGs and CDFSs start in blobaps 
+       linestyle[pickup:-1] = 2                                                       ; assign all "other" blobs the same linestyle (short dashes) 
 
 
-END                                                   ; of makehist procedure 
+  ; FILL IN DATA ARRAYS (blobtotals and aptotals) 
+     IF (n_elements(magbin) NE 0) THEN BEGIN                                                              ; check if user specified a magnitude bin for counting galaxies 
+       binindex = WHERE(fieldaps(0).mags EQ magbin, match)                                                  ; if so, check and see if the user's mag bin exists in the data 
+       IF (match EQ 1) THEN BEGIN                                                                           ; if the user's mag bin is in the data, 
+         FOR blob=0, nblobs-1 DO BEGIN                                                                        ; loop over the blobs to fill in blobtotals array 
+           blobtotals[blob] = float(blobaps(blob).galcounts[binindex]) / blobaps(blob).weight                   ; fill in blobtotals with galaxy counts in the specified bin 
+         ENDFOR                                                                                               ; all the blobs 
+         FOR ap=0, nfieldaps-1 DO BEGIN                                                                       ; loop over field apertures to fill in aptotals array 
+           aptotals[ap] = float(fieldaps(ap).galcounts[binindex]) / fieldaps(ap).weight                         ; fill in aptotals with galaxy counts in the specified bin 
+         ENDFOR                                                                                               ; all the field apertures  
+         magstringA = strcompress(string(magbin), /remove)                                                    ; write the lower bound of the bin as a string 
+         magstringB = strcompress(string(magbin+0.5), /remove)                                                ; write the upper bound of the bin as a string 
+         xtitle = xtitle + ' with ' + magband + ' magnitude between ' + magstringA + ' and ' + magstringB     ; alter xtitle to reflect that this is only N in a specific mag bin
+       ENDIF ELSE IF (match EQ 0) THEN BEGIN                                                                ; if the user's mag bin isn't in the data, 
+         print, 'Specified magnitude bin does not exist. Using total in all bins.'                            ; tell the user so and use all bins for counting galaxies: 
+         FOR blob=0, nblobs-1 DO BEGIN                                                                        ; loop over the blobs to fill in blobtotals array 
+           blobtotals[blob] = float( total(blobaps(blob).galcounts) ) / blobaps(blob).weight                    ; fill in blobtotals with total number of galaxies in all bins 
+         ENDFOR                                                                                               ; all the blobs 
+         FOR ap=0, nfieldaps-1 DO BEGIN                                                                       ; loop over field apertures to fill in aptotals array 
+           aptotals[ap] = float( total(fieldaps(ap).galcounts) ) / fieldaps(ap).weight                          ; fill in aptotals with total number of galaxies in all bins 
+         ENDFOR                                                                                               ; all the field apertures  
+       ENDIF                                                                                                ; if the user's mag bin doesn't exist 
+     ENDIF ELSE BEGIN                                                                                     ; if the user didn't specify a magnitude bin to use for counting galaxies,
+       FOR blob=0, nblobs-1 DO BEGIN                                                                        ; loop over the blobs to fill in blobtotals array 
+         blobtotals[blob] = float( total(blobaps(blob).galcounts) ) / blobaps(blob).weight                    ; fill in blobtotals with total number of galaxies in all bins 
+       ENDFOR                                                                                               ; all the blobs 
+       FOR ap=0, nfieldaps-1 DO BEGIN                                                                       ; loop over field apertures to fill in aptotals array 
+         aptotals[ap] = float( total(fieldaps(ap).galcounts) ) / fieldaps(ap).weight                          ; fill in aptotals with total number of galaxies in all bins 
+       ENDFOR                                                                                               ; all the field apertures  
+     ENDELSE                                                                                              ; if the magbin keyword wasn't set 
+
+
+  ; MAKE THE PLOT 
+    ; set up window for the plot
+     window, windownumber, retain=2, xsize=700., ysize=550. 
+    ; plot the field data 
+     ;         | data            | colors                              | text                        | text properties            | line properties 
+     plothist, aptotals, bin=1., background=255, color=0, axiscolor=0, xtitle=xtitle, ytitle=ytitle, charsize = 2.5, charthick=2, thick=2   ; plot the field apertures as a histogram
+    ; plot the blob data 
+     IF (n_elements(plotblobs) EQ 0) THEN BEGIN                                                                      ; if user didn't specify any specific blobs to plot, 
+       FOR blob=0, nblobs-1 DO BEGIN                                                                                   ; loop over all the blobs 
+         blob_ngal = blobtotals[blob]                                                                                    ; get N galaxies in this blob 
+         oplot, [blob_ngal, blob_ngal], [0., 1000.], linestyle=linestyle[blob], thick=2, color=colors[blob]              ; add a line for this blob to the plot
+         ;xyouts, blob_ngal+1., (200.*(blob+1.)), blobaps(blob).name, color=0, charsize=1.5                              ; label blob line - OBSOLETE 
+       ENDFOR                                                                                                          ; all the blobs 
+     ENDIF ELSE BEGIN                                                                                                ; if user did specify specific blobs to plot, 
+       FOR index=0, n_elements(plotblobs)-1 DO BEGIN                                                                   ; loop over just the blobs the user wants to plot 
+         blob = plotblobs[index]                                                                                         ; get the index of this blob from the plotblobs array
+         blob_ngal = blobtotals[blob]                                                                                    ; get N galaxies in this blob 
+         oplot, [blob_ngal, blob_ngal], [0., 1000.], linestyle=linestyle[blob], thick=2, color=colors[blob]              ; add a line for this blob to the plot
+         ;xyouts, blob_ngal+1., (200.*(blob+1.)), blobaps(blob).name, color=0, charsize=1.5                              ; label blob line - OBSOLETE 
+       ENDFOR                                                                                                          ; all user-specified blobs 
+     ENDELSE                                                                                                         ; plotblobs keyword was set (user only wanted some blobs)     
+    ; add a legend 
+     ;       | labels                   | properties of legend lines                                     | properties of legend text
+     legend, [blobaps.name, fieldname], color=[colors,0], linestyle=[linestyle,0], thick=2., number=0.1, textcolor=0, charsize=1.1, charthick=1, /left, $
+       /box, outline_color=0.,position=[0.63,0.89], /normal      ; properties and location of legend box  
+
+
+  ; SAVE THE PLOT 
+     savefile = '/boomerang-data/alhall/GalaxiesInBlobs/BestPlots/Histograms/' + outputname + '.png' ; add the full path onto the filename where the plot will be saved 
+     IF (n_elements(autosave) NE 0) THEN BEGIN                                                       ; check if user has a preference on whether or not to save the plot automatically
+       IF (autosave EQ 'y') THEN BEGIN                                                                 ; autosave has to be set to 'y' in order to save the plot automatically
+         write_png, savefile, tvrd(/true)                                                                ; write the plot to the PNG file specified by namestring 
+         print, 'Plot saved automatically.'                                                              ; notify the user that the plot was saved
+       ENDIF ELSE IF (autosave EQ 'n') THEN BEGIN                                                      ; if autosave is set to 'n', 
+         print, 'Plot not saved.'                                                                        ; don't save the plot and notify user that plot wasn't saved 
+       ENDIF ELSE BEGIN                                                                                ; if autosave is set to something other than 'y' or 'n',  
+         plotsave, savefile                                                                              ; ask user whether or not to save plot
+       ENDELSE                                                                                         ; that takes care of anything autosave could've been set to
+     ENDIF ELSE BEGIN                                                                                ; if the autosave keyword isn't set
+       plotsave, savefile                                                                              ; ask user whether or not to save plot
+     ENDELSE                                                                                         ; now the plot will have been saved if so desired      
+
+END                                                                                             ; of aphist procedure 
 
 
 

@@ -1,21 +1,25 @@
-;-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------;
+;-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------;
 ; SAMPLER.PRO 
 ;  Contains all modules used for getting the IDs of galaxies located in apertures on blobs and in fields. 
 ;  CONTENTS: 
 ;      blobsampling-----------------------procedure   (main module for blobs) 
 ;      fieldsampling----------------------procedure   (main module for fields) 
+;      makeacut---------------------------procedure   (main module for making cuts) IN PROGRESS
+;      zfilter----------------------------procedure 
+;      colorline--------------------------procedure    IN PROGRESS 
+;      colorgrid--------------------------procedure    IN PROGRESS
 ;      get_galaxies-----------------------function
 ;      apfinder---------------------------procedure 
 ;      readdata---------------------------procedure
 ;      struct_replace_field---------------procedure
-;-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------;
+;-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------;
 
 
 
 
 
 PRO blobsampling, ap_radius_arcsec, filename
-;------------------------------------------------------------------------------------------------------------------------------------------------------------------------------;
+;--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------;
 ; blobsampling procedure
 ;     Places apertures on blobs listed in a catalog (blobs.csv) and keeps track of the galaxies in each aperture. Each blob's name, RA, declination, fraction of good pixels,  
 ;       and the IDs of the galaxies it contains are stored in a structure which is exported as a FITS file. 
@@ -31,7 +35,7 @@ PRO blobsampling, ap_radius_arcsec, filename
 ;
 ; NOTES: This procedure gets all blob data from the file blobs.csv, located in the LIONScatalogs folder of GalaxiesInBlobs. 
 ;
-;------------------------------------------------------------------------------------------------------------------------------------------------------------------------------;
+;--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------;
 
  ; INITIAL SETUP 
 
@@ -41,7 +45,7 @@ PRO blobsampling, ap_radius_arcsec, filename
    ; define important quantities based on user input 
       ap_radius = ap_radius_arcsec/3600.             ; aperture radius in decimal degrees - this is what the code actually uses
       path = '/boomerang-data/alhall/GalaxiesInBlobs/LIONScatalogs/apertures/'    ; the full path for where the output FITS file should be saved
-      fullfilename = path + filename + '.fits'                                    ; add the path onto the filename given by user
+      fullfilename = path + filename + '.fits'                                    ; add the path onto the filename given by user   
 
    ; read in the file containing all blob information
       readdata, blobs, fields, nblobs, nfields, ntotal  
@@ -52,7 +56,7 @@ PRO blobsampling, ap_radius_arcsec, filename
       magdummy = 0.*dummyarray + 99.   ; make another dummy array with all 99s to store magnitudes of the galaxies in dummyarray
       dummyfloats = 0.*dummyarray - 1. ; make another dummy array with all float -1s for galaxy redshifts
       ; create a dummy structure for one blob/aperture containing blob name, RA & dec, fraction of good pixels, galaxy ID array, galaxy mags, and galaxy redshifts
-      dummystruct = {blobname:'', ra:0.0, dec:0.0, weight: 1.0, galIDs:dummyarray, galmags:magdummy, galz:dummyfloats}   
+      dummystruct = {blobname:'', ra:0.0, dec:0.0, weight: 1.0, galIDs:dummyarray, galz:dummyfloats, galmags:magdummy, mid:magdummy, blue:magdummy, altblue:magdummy}     
       ; replicate the dummy structure to make the full structure 
       blobstruct = replicate(dummystruct,nblobs)                        ; the main structure containing all blob information 
 
@@ -67,6 +71,50 @@ PRO blobsampling, ap_radius_arcsec, filename
    ; loop over blobs, getting galaxies in each one 
    FOR blob=0, nblobs-1 DO BEGIN
       blobdata = mrdfits('/boomerang-data/alhall/GalaxiesInBlobs/LIONScatalogs/individual/'+blobs.blobinfo[blob],1)     ; read this blob's catalog into a structure
+      ap_radius_pix = ap_radius_arcsec / blobs.pixelscale[blob]                                                         ; define the aperture radius in pixels for this blob image
+     ; get aperture weight          
+       ; get bpm and header info - but if we already have it from the previous blob, just keep that 
+        stackfile = blobs.stack[blob]                      ; name of this blob's stack file that has header info in it 
+        IF (blob NE 0) THEN BEGIN                            ; if this isn't the first blob in the catalog (ie, if there's a blob before this one), do the following:  
+          IF (stackfile NE blobs.stack[blob-1]) THEN BEGIN     ; if this blob uses a different stack and mask than the previous one, 
+            hdr =  headfits(stackfile)                           ; read in the header (to be used for converting RA & dec into pixel coordinates) 
+            mask = blobs.mask[blob]                              ; name of this blob's bpm file 
+            bpm = mrdfits(mask,0)                                ; read in the bpm 
+            IF (blobs.bpmtype[blob] EQ 1) THEN BEGIN             ; check if bad pixels are marked with 0s
+              bpm = -1.*(bpm - 1.)                                 ; if they are, flip them to get them into the right format (1 inside, 0 outside) 
+            ENDIF                                                ; this blob's bpm is now in the right format 
+          ENDIF                                                ; if this blob doesn't already have a header and bpm 
+        ENDIF ELSE IF (blob EQ 0) THEN BEGIN                 ; if this IS the first blob in the catalog, 
+          hdr =  headfits(stackfile)                           ; read in the header (to be used for converting RA & dec into pixel coordinates) 
+          mask = blobs.mask[blob]                              ; name of this blob's bpm file 
+          bpm = mrdfits(mask,0)                                ; read in the bpm 
+          IF (blobs.bpmtype[blob] EQ 1) THEN BEGIN             ; check if bad pixels are marked with 0s
+            bpm = -1.*(bpm - 1.)                                 ; if they are, flip them to get them into the right format (1 inside, 0 outside) 
+          ENDIF                                                ; this blob's bpm is now in the right format 
+        ENDIF                                                ; if this blob is the first in the catalog 
+        ; make an aperture image where everything inside the aperture has a value of 1 and everything outside (just the edge stuff) has a value of 0:     
+        dist_ellipse, dim, [ 2.*ap_radius_pix, 2.*ap_radius_pix], ap_radius_pix, ap_radius_pix, 1.,0.  ; make the aperture image
+        dim[where(dim LT ap_radius_pix, ntotalpix)] = 1.                                               ; set stuff inside to 1; note that ntotalpix is defined in this line as well!
+        dim[where(dim GE ap_radius_pix)] = 0.                                                          ; set stuff outside to 0        
+        ; find corners of box into which to insert aperture image ("dim")  
+        adxy, hdr, blobstruct(blob).ra, blobstruct(blob).dec, ap_x, ap_y       ; convert blob coordinates into image coordnates     
+        xlo = ap_x - floor(ap_radius_pix)      ; left edge         
+        xhi = ap_x + floor(ap_radius_pix)      ; right edge          
+        ylo = ap_y - floor(ap_radius_pix)      ; bottom edge         
+        yhi = ap_y + floor(ap_radius_pix)      ; top edge   
+        ; make sure the box dimensions match the dimensions of the aperture image (this gets weird because of fractions of pixels) 
+        dimsize = size(dim)                             ; get the dimensions of the aperture image 
+        IF ((xhi-xlo) NE (dimsize[1]-1.)) THEN BEGIN    ; if box & dim don't match in x size           
+          xhi = ap_x + floor(ap_radius_pix) - 1.           ; readjust box in x
+        ENDIF                                       
+        IF ((yhi-ylo) NE (dimsize[2]-1.)) THEN BEGIN    ; if box & dim don't match in y size          
+          yhi = ap_y + floor(ap_radius_pix) - 1.          ; readjust box in y                                                                                                                 
+        ENDIF   
+        ; get the number of bad pixels in the blob to get the weight 
+        minibpm = bpm[xlo:xhi,ylo:yhi]                                                    ; cut out the piece of the bpm that contains this blob aperture 
+        apbpm = minibpm*dim                                                               ; multiply aperture map by bpm to leave only BAD pixels INSIDE blob (so we can count them) 
+        badpix = where(apbpm GT 0, nbadpix)                                               ; label the bad pixels   
+        blobstruct(blob).weight = (float(ntotalpix) - float(nbadpix)) / float(ntotalpix)  ; fraction of good pixels to total is aperture weight 
      ; count the galaxies in this blob/aperture
         blob_galaxies_indices = get_galaxies(blobstruct(blob).ra, blobstruct(blob).dec, ap_radius, blobdata)
         blob_galaxies = blobdata.ID[blob_galaxies_indices]
@@ -75,8 +123,16 @@ PRO blobsampling, ap_radius_arcsec, filename
         print, blobstruct(blob).blobname, ' has ', strcompress(string(ngals)), ' galaxies'    ; tell the user how many galaxies are in/near this blob 
         lastindex = ngals - 1                                                                 ; define the last index of the blob_galaxies array 
         blobstruct(blob).galIDs[0:lastindex] = blob_galaxies                                  ; put the galaxy IDs into the structure for this aperture
-        blobstruct(blob).galmags[0:lastindex] = blobdata.redmag[blob_galaxies_indices]        ; put galaxy mags into the structure for this aperture
-        validz = tag_exist(blobdata, 'z')                                                     ; check to see if this blob's galaxies have redshift info
+        blobstruct(blob).galmags[0:lastindex] = blobdata.redmag[blob_galaxies_indices]        ; put red galaxy mags into the structure for this aperture
+        blobstruct(blob).mid[0:lastindex] = blobdata.midmag[blob_galaxies_indices]            ; put mid galaxy mags into the structure for this aperture
+        blobstruct(blob).blue[0:lastindex] = blobdata.bluemag[blob_galaxies_indices]          ; put blue galaxy mags into the structure for this aperture
+        validalt = tag_exist(blobdata, 'altbluemag')                                          ; check to see if this blob's galaxies have mags in another blue filter
+        IF (validalt NE 0b) THEN BEGIN                                                        ; if they do, 
+          blobstruct(blob).altblue[0:lastindex] = blobdata.altbluemag[blob_galaxies_indices]   ; put altbluemags into the structure for this aperture
+        ENDIF ELSE BEGIN                                                                      ; if not, 
+          blobstruct(blob).altblue[0:lastindex] = blobdata.bluemag[blob_galaxies_indices]       ; just use blue mags again for altblue 
+        ENDELSE                                                                               ; all the magnitude info has been filled in now 
+        validz = tag_exist(blobdata, 'z')                                                     ; check to see if we have galaxy redshift info for this blob 
         IF (validz NE 0b) THEN BEGIN                                                          ; if we have redshift info, 
           blobstruct(blob).galz[0:lastindex] = blobdata.z[blob_galaxies_indices]                ; put galaxy redshifts into the structure for this aperture
         ENDIF                                                                                 ; this blob has known galaxy redshifts
@@ -95,8 +151,8 @@ END        ; end of blobsampling procedure
 
 
 
-PRO fieldsampling, ap_radius_arcsec, nApertures, filename
-;------------------------------------------------------------------------------------------------------------------------------------------------------------------------------;
+PRO fieldsampling, ap_radius_arcsec, nApertures, filename, indextosample=indextosample
+;--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------;
 ; fieldsampling procedure
 ;     Places a user-specified number of random apertures on a field (from 3D-HST, specified by user) and keeps track of the galaxies in each aperture. Each aperture's 
 ;       number, RA, declination, fraction of good pixels, and the IDs of the galaxies it contains are stored in a structure which is exported as a FITS file. 
@@ -104,6 +160,8 @@ PRO fieldsampling, ap_radius_arcsec, nApertures, filename
 ; INPUT: ap_radius_arcsec - the radius in arcseconds of the apertures to place randomly throughout the field 
 ;        nApertures - the number of random apertures to place in the field 
 ;        filename - the name of the FITS file in which the results of this analysis will be saved (to be located in LIONScatalogs/apertures in GalaxiesInBlobs) 
+;        --
+;        indextosample - an optional integer specifying which field in fields.csv to sample with random apertures; if not set, user will be asked which field to use 
 ; 
 ; OUTPUT: HSTstruct - the main structure in which every good aperture's number (1 through nApertures), RA, declination, weight (the fraction of the aperture containing 
 ;           good pixels), and array full of IDs of galaxies contained within the aperture are stored, created by replicating the structure for one aperture "nApertures" 
@@ -111,43 +169,45 @@ PRO fieldsampling, ap_radius_arcsec, nApertures, filename
 ;
 ; Uses the get_galaxies function, the readdata procedure, and the apfinder procedure. 
 ;
-; NOTES: This procedure gets all field data from the file fields.csv, located in the LIONScatalogs folder of GalaxiesInBlobs. 
+; NOTES: - This procedure gets all field data from the file fields.csv, located in the LIONScatalogs folder of GalaxiesInBlobs. 
+;        - When reading in large BPMs, the average time it takes is less than 1 minute; any longer, and terminal needs to be killed! 
 ;
-;------------------------------------------------------------------------------------------------------------------------------------------------------------------------------;
+;--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------;
 
  ; INITIAL SETUP 
 
-   ; notify IDL of all functions used in this procedure
-      FORWARD_FUNCTION get_galaxies 
-
+   FORWARD_FUNCTION get_galaxies                         ; notify IDL of all functions used in this procedure
    readdata, blobs, fields, nblobs, nfields, ntotal      ; read in all field data and rename structure's fields to be useful
    blobcoords = dblarr(2,nblobs)                         ; make an array for coordinates (RA & declination) of regions we want to avoid in our analysis (ie, blobs) 
    blobcoords[0,*] = blobs.blobra                        ; fill in RAs of avoidance regions 
    blobcoords[1,*] = blobs.blobdec                       ; fill in declinations of avoidance regions 
 
-   ; have user pick which field to sample
-      lastfieldindex = n_elements(fields.fieldname)-1
-      FOR i=0, lastfieldindex DO BEGIN
-        print, fix(i), '     ', fields.fieldname(i)        ; print the name of each field and a corresponding integer 
-      ENDFOR   ; all the fields 
-      sample = 0S 
-      read, sample, prompt='Enter number of field you wish to sample from list above: '
-      typecode = size(sample, /type)         ; a type code of 2 is an integer, which is what's needed 
-      IF (  (typecode NE 2)   OR   ( (typecode EQ 2) AND ((sample LT 0) OR (sample GT lastfieldindex)) )   ) THEN BEGIN
-        WHILE (  (typecode NE 2)   OR   ( (typecode EQ 2) AND ((sample LT 0) OR (sample GT lastfieldindex)) )   ) DO BEGIN 
-          print, 'Invalid response. Select from the listed field numbers. Enter response as an integer.' 
-          sample = 0S        ; reset sample to be an integer 
-          read, sample, prompt='Enter number of field you wish to sample from list above: ' 
-          typecode = size(sample, /type)         ; a type code of 2 is an integer, which is what's needed 
-        ENDWHILE   ; while the 'sample' response is invalid 
-      ENDIF ELSE IF ((typecode EQ 2) AND (sample GE 0) AND (sample LE lastfieldindex)) THEN BEGIN     ; if the user entered 'sample' correctly 
-        print, 'selected field: ', fields.fieldname(sample) 
-      ENDIF      ; if the 'sample' response is invalid 
+   IF (n_elements(indextosample) EQ 1) THEN BEGIN                                                                         ; if indextosample is given and has correct # of elements,
+     sample = indextosample                                                                                                 ; then we already know which field we want to sample 
+   ENDIF ELSE BEGIN                                                                                                       ; otherwise, have user pick which field to sample
+      lastfieldindex = n_elements(fields.fieldname)-1                                                                       ; see how many fields are in the fields.csv catalog
+      FOR i=0, lastfieldindex DO BEGIN                                                                                      ; loop over all the fields in the catalog 
+        print, fix(i), '     ', fields.fieldname(i)                                                                           ; print name of each field and a corresponding integer 
+      ENDFOR                                                                                                                ; all the fields 
+      sample = 0S                                                                                                           ; set up an empty integer for index of the selected field 
+      read, sample, prompt='Enter number of field you wish to sample from list above: '                                     ; ask user which field to use 
+      typecode = size(sample, /type)                                                                                        ; a type code of 2 is an integer, which is what we need 
+      IF (  (typecode NE 2)   OR   ( (typecode EQ 2) AND ((sample LT 0) OR (sample GT lastfieldindex)) )   ) THEN BEGIN     ; if the user gave bad input, 
+        WHILE (  (typecode NE 2)   OR   ( (typecode EQ 2) AND ((sample LT 0) OR (sample GT lastfieldindex)) )   ) DO BEGIN    ; as long as that input is still bad, 
+          print, 'Invalid response. Select from the listed field numbers. Enter response as an integer.'                        ; tell the user
+          sample = 0S                                                                                                           ; reset sample to be an integer 
+          read, sample, prompt='Enter number of field you wish to sample from list above: '                                     ; ask the user once again which field to use 
+          typecode = size(sample, /type)                                                                                        ; check the type of sample again (need 2) 
+        ENDWHILE                                                                                                              ; while the 'sample' response is invalid 
+      ENDIF ELSE IF ((typecode EQ 2) AND (sample GE 0) AND (sample LE lastfieldindex)) THEN BEGIN                           ; if the user entered 'sample' correctly 
+        print, 'selected field: ', fields.fieldname(sample)                                                                   ; confirm the field selected by the user 
+      ENDIF                                                                                                                 ; if the 'sample' response is invalid 
+    ENDELSE                                                                                                               ; if user didn't specify a field to sample 
  
    ; define important quantities based on user input and field data 
       ; the radius of the apertures used to calculate density:  
-         ap_radius = ap_radius_arcsec/3600.             ; aperture radius in decimal degrees
-         hstap_radius_pix = ap_radius_arcsec / fields.pixelscale(sample)     ; aperture size in pixels using the pixel scale given in fields.csv
+         ap_radius = ap_radius_arcsec/3600.                                          ; aperture radius in decimal degrees
+         ap_radius_pix = ap_radius_arcsec / fields.pixelscale(sample)                ; aperture size in pixels using the pixel scale given in fields.csv
       ; file saving stuff: 
          path = '/boomerang-data/alhall/GalaxiesInBlobs/LIONScatalogs/apertures/'    ; the full path for where the output FITS file should be saved
          fullfilename = path + filename + '.fits'                                    ; add the path onto the filename given by user
@@ -156,18 +216,18 @@ PRO fieldsampling, ap_radius_arcsec, nApertures, filename
       fieldfile = '/boomerang-data/alhall/GalaxiesInBlobs/LIONScatalogs/individual/' + fields.fieldinfo(sample)
       thisfield = mrdfits(fieldfile,1)   
    ; read in HST bad pixel map for random aperture analysis  
-      print, 'reading in header...'
-        stackfile = fields.stack(sample)
-        hsthdr =  headfits(stackfile)
+      print, 'reading in header...' 
+        stackfile = fields.stack(sample)                          ; filename of the stack image 
+        hdr =  headfits(stackfile)                                ; we only need the header from the stack, not the image itself 
       print, 'reading in mask image and converting into bpm...'
-        TIC      ; let's time this part, since it makes the computer freeze sometimes (average time is less than 1 minute; any longer, and terminal needs to be killed) 
-          hstmask = fields.mask(sample)
-          hstbpm = -1.*(mrdfits(hstmask,0) - 1.)      ; this is the mask image for weeding out bad pixels in 3DHST field, in the same format as our blob bpms 
-        TOC      ; how long did it take to read in and convert the mask image? 
-      print, 'determining size of field image (bpm)...'
-        hstsizeinfo = size(hstbpm)               ; the dimensions of the mask image in pixels 
-        hstnpix_x = hstsizeinfo[1]               ; number of pixels in mask in the x direction
-        hstnpix_y = hstsizeinfo[2]               ; number of pixels in mask in the y direction 
+        TIC                                                       ; let's time this part, since it makes the computer freeze sometimes (SEE HEADER NOTES) 
+          mask = fields.mask(sample)                              ; filename of the bpm 
+          bpm = -1.*(mrdfits(mask,0) - 1.)                        ; this is the mask image for weeding out bad pixels in 3DHST field, in the same format as our blob bpms 
+        TOC                                                       ; how long did it take to read in and convert the mask image? 
+   ; get the size of the field image's mask (bpm)
+      sizeinfo = size(bpm)                                        ; the dimensions of the mask image in pixels 
+      npix_x = sizeinfo[1]                                        ; number of pixels in mask in the x direction
+      npix_y = sizeinfo[2]                                        ; number of pixels in mask in the y direction 
 
 
  ; SAMPLE THE FIELD
@@ -179,53 +239,47 @@ PRO fieldsampling, ap_radius_arcsec, nApertures, filename
       magdummy = 0.*dummyarray + 99.   ; make another dummy array with all 99s to store magnitudes of the galaxies in dummyarray
       dummyfloats = 0.*dummyarray - 1. ; make another dummy array with all float -1s for galaxy redshifts
       ; make a dummy structure for one aperture containing aperture number, center RA & dec, % of aperture containing good pixels, galaxy ID array, gal mags, and gal redshifts 
-      dummystruct = {aperture:0L, ra:0.0, dec:0.0, weight:0.0, galIDs:dummyarray, galmags:magdummy, galz:dummyfloats}     
+      dummystruct = {aperture:0L, ra:0.0, dec:0.0, weight:0.0, galIDs:dummyarray, galz:dummyfloats, galmags:magdummy, mid:magdummy, blue:magdummy, altblue:magdummy}     
       ; replicate the dummy structure to make the full structure 
       HSTstruct = replicate(dummystruct,nApertures)                       ; the main structure containing all random aperture information
      
    ; make an aperture image where everything inside the aperture has a value of 1 and everything outside (just the edge stuff) has a value of 0:
-      dist_ellipse, hstdim, [ 2.*hstap_radius_pix, 2.*hstap_radius_pix], hstap_radius_pix, hstap_radius_pix, 1.,0.
-      hstdim[where(hstdim LT hstap_radius_pix, hstntotalpix)] = 1.      ; note that hstntotalpix is defined in this line as well!
-      hstdim[where(hstdim GE hstap_radius_pix)] = 0.
-
-   ; keep track of how many apertures are made in total
-      hstap_count = 0 
+      dist_ellipse, dim, [ 2.*ap_radius_pix, 2.*ap_radius_pix], ap_radius_pix, ap_radius_pix, 1.,0.
+      dim[where(dim LT ap_radius_pix, ntotalpix)] = 1.      ; note that ntotalpix is defined in this line as well!
+      dim[where(dim GE ap_radius_pix)] = 0.
 
    ; now place random apertures and count galaxies inside them 
-      TIC   ; let's time this 
-      FOR ap=0, nApertures-1 DO BEGIN       ; for the specified number of apertures
-        ; find a good aperture to use: 
-           apfinder, hstnpix_x, hstnpix_y, hstap_radius_pix, ap_radius, hstdim, hstbpm, hsthdr, hstap_count, hstap_x, hstap_y, hstnbadpix, hstntotalpix, $
-             hstap_ra, hstap_dec, blobcoords=blobcoords 
-        ; calculate fraction of aperture that is good pixels:
-           hstap_area_weight = (float(hstntotalpix) - float(hstnbadpix)) / float(hstntotalpix) 
-        ; convert pixels to sky coords 
-           xyad, hsthdr, hstap_x, hstap_y, hstap_ra, hstap_dec    ; for HST field
-        ; add aperture number, RA, and dec to structure for this aperture
-           HSTstruct(ap).aperture = ap+1
-           HSTstruct(ap).ra = hstap_ra
-           HSTstruct(ap).dec = hstap_dec
-           HSTstruct(ap).weight = hstap_area_weight 
-        ; find the galaxies in this aperture and put them into add galaxies to aparray
-           hst_galaxies_indices = get_galaxies(hstap_ra, hstap_dec, ap_radius, thisfield)    ; get catalog indices of the galaxies in the aperture
-           IF (hst_galaxies_indices[0] GT -1.0) THEN BEGIN       ; if there are any galaxies in this aperture, do the following
-             hst_galaxies = thisfield.ID[hst_galaxies_indices]        ; turn catalog indices into actual ID numbers
-             ap_ngals = n_elements(hst_galaxies)                      ; total number of galaxies in the aperture
-             lastindex = ap_ngals - 1                                 ; define the last index of aparray
-             HSTstruct(ap).galIDs[0:lastindex] = hst_galaxies         ; put the galaxy IDs into the structure for this aperture
-             HSTstruct(ap).galmags[0:lastindex] = thisfield.redmag[hst_galaxies_indices]    ; put galaxy mags into structure for this aperture
-             HSTstruct(ap).galz[0:lastindex] = thisfield.z[hst_galaxies_indices]           ; put galaxy redshifts into the structure for this aperture
-           ENDIF   ; if the aperture contained at least one galaxy  
-      ENDFOR    ; all the random apertures 
-      help, HSTstruct   ; a test to make sure the completed main structure looks ok
-      print, strcompress(string(hstap_count)), ' TOTAL APERTURES GENERATED IN THIS FIELD.'     ; How many random apertures were generated in total during this analysis? 
-      hstthrownout = (float(hstap_count) - float(nApertures))/float(hstap_count)*100.          ; percentage of generated apertures that ended up being unsuitable for analysis 
-      print, strcompress(string(hstthrownout)), '% of all random apertures were discarded'     ; as a safety check, print out the above percentage 
+      ap_count = 0                                                                          ; keep track of how many apertures are made in total
+      TIC                                                                                   ; let's time this 
+      FOR ap=0, nApertures-1 DO BEGIN                                                       ; for the specified number of apertures
+        apfinder, npix_x, npix_y, ap_radius_pix, ap_radius, dim, bpm, hdr, ap_count, ap_x, ap_y, nbadpix, ntotalpix, ap_ra, ap_dec, blobcoords=blobcoords ; find a good aperture to use
+        ap_area_weight = (float(ntotalpix) - float(nbadpix)) / float(ntotalpix)               ; calculate fraction of aperture that is good pixels
+        xyad, hdr, ap_x, ap_y, ap_ra, ap_dec                                                  ; convert pixels to sky coords 
+        HSTstruct(ap).aperture = ap+1                                                         ; add aperture number to structure for this aperture
+        HSTstruct(ap).ra = ap_ra                                                              ; add RA to structure for this aperture
+        HSTstruct(ap).dec = ap_dec                                                            ; add declination to structure for this aperture
+        HSTstruct(ap).weight = ap_area_weight                                                 ; add weight to structure for this aperture
+        galaxies_indices = get_galaxies(ap_ra, ap_dec, ap_radius, thisfield)                  ; get catalog indices of the galaxies in the aperture
+        IF (galaxies_indices[0] GT -1.0) THEN BEGIN                                           ; if there are any galaxies in this aperture, add them to the structure as follows: 
+          galaxies = thisfield.ID[galaxies_indices]                                             ; turn catalog indices into actual ID numbers
+          ap_ngals = n_elements(galaxies)                                                       ; total number of galaxies in the aperture
+          lastindex = ap_ngals - 1                                                              ; define the last index of aparray
+          HSTstruct(ap).galIDs[0:lastindex] = galaxies                                          ; put the galaxy IDs into the structure for this aperture
+          HSTstruct(ap).galz[0:lastindex] = thisfield.z[galaxies_indices]                       ; put galaxy redshifts into the structure for this aperture
+          HSTstruct(ap).galmags[0:lastindex] = thisfield.redmag[galaxies_indices]               ; put red galaxy mags into structure for this aperture
+          HSTstruct(ap).mid[0:lastindex] = thisfield.midmag[galaxies_indices]                   ; put mid galaxy mags into structure for this aperture
+          HSTstruct(ap).blue[0:lastindex] = thisfield.bluemag[galaxies_indices]                 ; put blue galaxy mags into structure for this aperture
+          HSTstruct(ap).altblue[0:lastindex] = thisfield.altbluemag[galaxies_indices]           ; put blue galaxy mags into structure for this aperture
+        ENDIF                                                                                 ; if the aperture contained at least one galaxy  
+      ENDFOR                                                                                ; all the random apertures 
+      help, HSTstruct                                                                       ; a test to make sure the completed main structure looks ok
+      print, strcompress(string(ap_count)), ' TOTAL APERTURES GENERATED IN THIS FIELD.'     ; How many random apertures were generated in total during this analysis? 
+      thrownout = (float(ap_count) - float(nApertures))/float(ap_count)*100.                ; percentage of generated apertures that ended up being unsuitable for analysis 
+      print, strcompress(string(thrownout)), '% of all random apertures were discarded'     ; as a safety check, print out the above percentage 
       TOC        ; how long did this analysis take?
 
    ; last step: write the completed main structure to a FITS file
       mwrfits, HSTstruct, fullfilename, /create
-
 
 END        ; end of fieldsampling procedure
 
@@ -237,34 +291,319 @@ END        ; end of fieldsampling procedure
 
 
 
-PRO zfilter, filename, z, zerr, zstring
-;------------------------------------------------------------------------------------------------------------------------------------------------------------------------------;
-; zfilter procedure
-;  Reads in a FITS file created by the blobsampling or fieldsampling procedures and filters that file to contain only galaxies within a specified redshift range. 
-; 
-; INPUT: filename - a string giving the name of a FITS file containing galaxy IDs within multiple apertures 
-;        z - the target redshift at which we want to keep galaxies 
-;        zerr - the maximum difference between a galaxy's redshift and the target redshift for that galaxy to be kept 
-;        zstring - the target redshift written as a string in the following format: for z = 2.3, zstring = '2p3'
+PRO makeacut, catalog, cuttype, parameters, skip
+;--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------;
+; makeacut procedure
+;   description 
 ;
-; OUTPUT: Filters galaxies with z not within z +- zerr out of the structure from the original FITS file and writes the filtered structure into a new FITS file.  
+; INPUT: catalog - a string giving the name of a FITS file containing galaxy IDs within multiple apertures 
+;        cuttype - a string specifying which cutting procedure to use on the catalog - can be 'z' (redshift cut), 'colorline' (simple color cut), or 'colorgrid' (grid color cut) 
+;        parameters - a list (meaning the IDL data type) of parameters to be passed into whichever procedure is used to make the cut; the contents of this list depend on cuttype 
+;        skip - an integer or array of integers giving the index/indices of a catalog to be skipped when applying cuts; to skip no indices, set skip to -1
 ;
-; Uses no other procedures nor functions. 
+; OUTPUT: filters the catalog using one of three procedures (whichever is specified by "cuttype," see below) and outputs the filtered catalog as a FITS file 
 ;
-;------------------------------------------------------------------------------------------------------------------------------------------------------------------------------;
-  apstruct = mrdfits('/boomerang-data/alhall/GalaxiesInBlobs/LIONScatalogs/apertures/'+filename+'.fits',1) ; read the apertures file into a structure
-  naps = n_elements(apstruct)                                                                              ; count the number of apertures in the structure
-  FOR ap=0, naps-1 DO BEGIN                                                                                ; for each aperture in the structure: 
-    badz = WHERE( (apstruct(ap).galz GT (z+zerr)) OR (apstruct(ap).galz LT (z-zerr)) )                       ; find where galaxy redshifts don't fall near target redshift
-    apstruct(ap).galIDs[badz] = -1                                                                           ; remove those galaxies' IDs from the structure
-    apstruct(ap).galmags[badz] = 99.                                                                         ; remove those galaxies' magnitudes from the structure 
-    apstruct(ap).galz[badz] = -1.                                                                            ; remove those galaxies' redshifts from the structure
-  ENDFOR                                                                                                   ; all the apertures in the structure have been filtered by z 
-  newfile = '/boomerang-data/alhall/GalaxiesInBlobs/LIONScatalogs/apertures/'+filename+'_z' + zstring + '.fits'  ; make a new filename for the filtered structure
-  mwrfits, apstruct, newfile, /create                                                                                  ; write the filtered structure to a fits file 
-END       ; of zfilter procedure
+; Uses the zfilter procedure, the colorline procedure, and the colorgrid procedure. 
+;
+; NOTES: See the zfilter, colorline, and colorgrid procedure for details regarding this procedure's "parameters" argument. 
+;          For zfilter (cuttype = 'z'), parameters should be: list(z, zerr, zstring) 
+;          For colorline (cuttype = 'colorline'), parameters should be: list(m, b, c, useblue, nameadd) 
+;          For colorgrid (cuttype = 'colorgrid'), parameters should be: ???????????????????????????????????????????????????????????????????????????????????????????????????????????????????????
+;
+;--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------;
+  ; make sure the "skip" argument is valid before doing anything else 
+  struct = mrdfits('/boomerang-data/alhall/GalaxiesInBlobs/LIONScatalogs/apertures/'+catalog+'.fits',1) ; read in the catalog to see how many apertures are in it
+  napertures = n_elements(struct)                                                                       ; count the number of apertures in the catalog 
+  integertypes = [2, 3, 12, 13, 14, 15]                                                                 ; make an array of all the different IDL type codes for integers
+  skiptype = size(skip, /type)                                                                          ; see what data type the "skip" argument is (should be integer) 
+  ok = WHERE(integertypes EQ skiptype, check)                                                           ; use the above two lines to check if "skip" is actually integer(s) 
+  badneg = WHERE(skip LT -1, nneg)                                                                      ; check if any elements of "skip" are negative aside from -1 
+  badbig = WHERE(skip GE napertures, nbig)                                                              ; check if any elements of "skip" are larger than # of indices in catalog
+  skipneg = WHERE(skip EQ -1, nminusone)                                                                ; see if any elements of "skip" are -1 (bad if skip is array, fine otherwise)
+  IF (check EQ 0) THEN BEGIN                                                                                  ; if skip isn't integer(s), 
+    print, 'Invalid data type for "skip" argument. This variable must be an integer. No cuts will be made.'     ; tell the user so and make no cuts 
+  ENDIF ELSE IF ( (nneg NE 0) OR (nbig NE 0) ) THEN BEGIN                                                     ; if some elements of skip are too low or too high, 
+    print, 'Invalid indices given in "skip" argument. No cuts will be made.'                                    ; tell the user so and make no cuts 
+  ENDIF ELSE IF ( (n_elements(skip) GT 1) AND (nminusone NE 0) ) THEN BEGIN                                   ; if skip is an array but contains a -1, 
+    print, 'Invalid indices given in "skip" argument. No cuts will be made.'                                    ; tell the user so and make no cuts
+  ; now make sure "cuttype" argument is valid 
+  ENDIF ELSE IF ( size(cuttype, /type) NE 7 ) THEN BEGIN                                                      ; if cuttype isn't a string, 
+    print, 'Invalid data type for "cuttype" argument. This variable must be a string. No cuts will be made.'    ; tell the user so and make no cuts 
+  ENDIF ELSE IF ( (cuttype NE 'z') OR (cuttype NE 'colorline') OR (cuttype NE 'colorgrid') ) THEN BEGIN      ; if an invalid cut type was supplied by user 
+    print, 'Invalid cut type given. No cuts will be made.'                                                      ; tell the user so and make no cuts 
+  ; now move on to the three different types of cuts 
+
+  ENDIF ELSE IF (cuttype EQ 'z') THEN BEGIN                                                       ; REDSHIFT CUTS 
+    IF (n_elements(parameters) NE 3) THEN BEGIN                                                          ; if wrong number of parameters given for this kind of cut, 
+      print, 'Incorrect number of parameters. No cuts will be made.'                                       ;  tell the user so and make no cuts 
+    ENDIF ELSE IF ( (size(parameters[0], /type) NE 4) OR (size(parameters[0], /type) NE 5) ) THEN BEGIN  ; if the user's z isn't a float or double (ie, if it has wrong data type), 
+      print, 'Redshift z has incorrect data type. No cuts will be made.'                                   ; tell the user so and make no cuts 
+    ENDIF ELSE IF ( (size(parameters[1], /type) NE 4) OR (size(parameters[1], /type) NE 5) ) THEN BEGIN  ; if the user's zerr isn't a float or double (ie, if it has wrong data type), 
+      print, 'Redshift range zerr has incorrect data type. No cuts will be made.'                          ; tell the user so and make no cuts 
+    ENDIF ELSE IF (size(parameters[2], /type) NE 7) THEN BEGIN                                           ; if zstring isn't a string (ie, if it has wrong data type), 
+      print, 'Redshift string zstring has incorrect data type. No cuts will be made.'                      ; tell the user so and make no cuts 
+    ENDIF ELSE BEGIN                                                                                     ; if all the right parameters were given, 
+      zfilter, catalog, parameters[0], parameters[1], parameters[2], skip                                  ; run zfilter procedure on the catalog 
+    ENDELSE                                                                                              ; redshift cuts are done 
+
+  ENDIF ELSE IF (cuttype EQ 'colorline') THEN BEGIN                                               ; SIMPLE STRAIGHT-LINE COLOR CUTS
+    IF (n_elements(parameters) NE 5) THEN BEGIN                                                          ; if wrong number of parameters given for this kind of cut, 
+      print, 'Incorrect number of parameters. No cuts will be made.'                                       ;  tell the user so and make no cuts  
+    ENDIF ELSE IF ( (size(parameters[0], /type) NE 4) OR (size(parameters[0], /type) NE 5) ) THEN BEGIN  ; if the user's m isn't a float or double (ie, if it has wrong data type), 
+      print, 'Line slope m has incorrect data type. No cuts will be made.'                                 ; tell the user so and make no cuts 
+    ENDIF ELSE IF ( (size(parameters[1], /type) NE 4) OR (size(parameters[1], /type) NE 5) ) THEN BEGIN  ; if the user's b isn't a float or double (ie, if it has wrong data type), 
+      print, 'Line y-intercept b has incorrect data type. No cuts will be made.'                           ; tell the user so and make no cuts 
+    ENDIF ELSE IF ( (size(parameters[2], /type) NE 4) OR (size(parameters[2], /type) NE 5) ) THEN BEGIN  ; if the user's c isn't a float or double (ie, if it has wrong data type), 
+      print, 'Line cap c has incorrect data type. No cuts will be made.'                                   ; tell the user so and make no cuts 
+    ENDIF ELSE IF (size(parameters[3], /type) NE 7) THEN BEGIN                                           ; if useblue isn't a string (ie, if it has wrong data type), 
+      print, 'Parameter "useblue" has incorrect data type. No cuts will be made.'                          ; tell the user so and make no cuts 
+    ENDIF ELSE IF (size(parameters[4], /type) NE 7) THEN BEGIN                                           ; if nameadd isn't a string (ie, if it has wrong data type), 
+      print, 'Parameter "nameadd" has incorrect data type. No cuts will be made.'                          ; tell the user so and make no cuts 
+    ENDIF ELSE BEGIN                                                                                     ; if all the right parameters were given, 
+      colorline, catalog, parameters[0], parameters[1], parameters[2], parameters[3], parameters[4], skip  ; run colorline procedure on the catalog 
+    ENDELSE                                                                                              ; simple color cuts are done 
+
+  ENDIF ELSE IF (cuttype EQ 'colorgrid') THEN BEGIN                                               ; PROBABILITY-GRID COLOR CUTS
+    print, 'Color gridding has not been implemented yet. Sorry for the inconvenience.' 
+  ENDIF                                                                                           ; all cuts have been made 
+
+END       ; of makeacut procedure 
 
 
+
+
+
+
+
+
+
+  PRO zfilter, filename, z, zerr, zstring, skip 
+  ;---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------;
+  ; zfilter procedure
+  ;  Reads in a FITS file created by the blobsampling or fieldsampling procedures and filters that file to contain only galaxies within a specified redshift range. 
+  ; 
+  ; INPUT: filename - a string giving the name of a FITS file containing galaxy IDs within multiple apertures 
+  ;        z - the target redshift at which we want to keep galaxies 
+  ;        zerr - the maximum difference between a galaxy's redshift and the target redshift for that galaxy to be kept 
+  ;        zstring - the target redshift written as a string in the following format: for z = 2.3, zstring = '2p3'
+  ;        skip - an integer or array of integers giving the index/indices of a catalog to be skipped when applying cuts; to skip no indices, set skip to -1 
+  ;
+  ; OUTPUT: Filters galaxies with z not within z +- zerr out of the structure from the original FITS file and writes the filtered structure into a new FITS file.  
+  ;
+  ; Uses the remover function. 
+  ;
+  ; NOTE: This procedure is meant to be run by the makeacut procedure rather than being called on its own. 
+  ;
+  ;---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------;
+    FORWARD_FUNCTION remover                                                                                 ; notify IDL that this function will be used 
+    apstruct = mrdfits('/boomerang-data/alhall/GalaxiesInBlobs/LIONScatalogs/apertures/'+filename+'.fits',1) ; read the apertures file into a structure
+    naps = n_elements(apstruct)                                                                              ; count the number of apertures in the structure
+    nskip = n_elements(skip)                                                                                 ; count number of apertures to skip 
+    skiporder = sort(skip)                                                                                   ; get indices of skip such that elements are in ascending order
+    skip = skip[skiporder]                                                                                   ; rewrite skip so elements increase to avoid later loop issues
+
+    ; do cuts on whole structure if we don't have to skip any apertures 
+    IF (skip EQ -1) THEN BEGIN                                                                               ; if no apertures should be skipped over when making the cut, 
+      FOR ap=0, naps-1 DO BEGIN                                                                                ; for each aperture in the structure: 
+        badz = WHERE( (apstruct(ap).galz GT (z+zerr)) OR (apstruct(ap).galz LT (z-zerr)) )                       ; find where galaxy redshifts don't fall near target redshift
+        apstruct = remover(apstruct, ap, badz)                                                                   ; remove those galaxies from the structure 
+      ENDFOR                                                                                                   ; all the apertures in the structure have been filtered by z 
+
+    ; if we do have to skip any apertures, break up the structure array into pieces
+    ; first piece of structure array: 
+    ENDIF ELSE IF (skip NE -1) THEN BEGIN                                                                    ; if at least one aperture should be skipped when making the cut, 
+      FOR ap=0, skip[0]-1 DO BEGIN                                                                             ; for each aperture in the structure from start to first skip: 
+        badz = WHERE( (apstruct(ap).galz GT (z+zerr)) OR (apstruct(ap).galz LT (z-zerr)) )                       ; find where galaxy redshifts don't fall near target redshift
+        apstruct = remover(apstruct, ap, badz)                                                                   ; remove those galaxies from the structure 
+      ENDFOR                                                                                                   ; apertures from 0 to first skip have been filtered by z 
+      ; middle piece(s) of structure array:
+      IF (nskip GT 1) THEN BEGIN                                                                               ; if there's more than one aperture to be skipped, 
+        FOR skipap=1, nskip-2 DO BEGIN                                                                           ; loop over all the skips between the first and last ones 
+          FOR ap=skip[skipap-1]+1, skip[skipap]-1 DO BEGIN                                                         ; for each aperture in the structure between two skips: 
+            badz = WHERE( (apstruct(ap).galz GT (z+zerr)) OR (apstruct(ap).galz LT (z-zerr)) )                       ; find where galaxy redshifts don't fall near target redshift
+            apstruct = remover(apstruct, ap, badz)                                                                   ; remove those galaxies from the structure 
+          ENDFOR                                                                                                   ; apertures between skips have been filtered by z 
+        ENDFOR                                                                                                   ; all apertures from start to the last skip have been updated 
+      ENDIF                                                                                                    ; if more that one aperture had to be skipped   
+      ; last piece of structure array: 
+      FOR ap=skip[-1]+1, naps-1 DO BEGIN                                                                       ; for each aperture in the structure from last skip to end: 
+        badz = WHERE( (apstruct(ap).galz GT (z+zerr)) OR (apstruct(ap).galz LT (z-zerr)) )                       ; find where galaxy redshifts don't fall near target redshift
+        apstruct = remover(apstruct, ap, badz)                                                                   ; remove those galaxies from the structure 
+      ENDFOR                                                                                                   ; apertures from last skip to end have been filtered by z 
+    ENDIF                                                                                                    ; if at least one aperture had to be skipped over 
+
+    newfile = '/boomerang-data/alhall/GalaxiesInBlobs/LIONScatalogs/apertures/z/'+zstring+'/'+filename+'_z' + zstring + '.fits'  ; make a new filename for the filtered structure
+    mwrfits, apstruct, newfile, /create                                                                                          ; write the filtered structure to a fits file 
+  END       ; of zfilter procedure
+
+
+
+
+
+
+
+
+
+  PRO colorline, filename, m, b, c, useblue, nameadd, skip
+  ;---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------;
+  ; colorline procedure
+  ;  Reads in a FITS file created by the blobsampling or fieldsampling procedures and filters that file by making simple straight-line color cuts to galaxy members. Galaxies 
+  ;    that are kept are the ones whose colors are consistent with some target redshift; the straight line whose parameters are passed into this procedure marks the boundary
+  ;    between galaxies with colors consistent with the target redshift and those whose colors are inconsistent with the target redshift. 
+  ; 
+  ; INPUT: filename - a string giving the name of a FITS file containing galaxy IDs within multiple apertures 
+  ;        m - the slope of the color cut boundary line
+  ;        b - the y-intercept of the color cut boundary line
+  ;        c - a cap value above which all galaxies have colors consistent with the target redshift and are therefore all kept 
+  ;        useblue - a string specifying which blue band to use for colors if there are multiple blue bands (should be 'blue' or 'altblue') 
+  ;        nameadd - a string to be appended onto the original filename to create the name of this procedure's output file 
+  ;        skip - an integer or array of integers giving the index/indices of a catalog to be skipped when applying cuts; to skip no indices, set skip to -1 
+  ;
+  ; OUTPUT: Filters galaxies with colors below and to the right of the given line out of the input structure and writes the filtered structure into a new FITS file.  
+  ;
+  ; Uses the remover function. 
+  ;
+  ; NOTE: This procedure is meant to be run by the makeacut procedure rather than being called on its own. 
+  ;
+  ;---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------;
+    FORWARD_FUNCTION remover                                                                                 ; notify IDL that this function will be used 
+    apstruct = mrdfits('/boomerang-data/alhall/GalaxiesInBlobs/LIONScatalogs/apertures/'+filename+'.fits',1) ; read the apertures file into a structure
+    naps = n_elements(apstruct)                                                                              ; count the number of apertures in the structure
+    nskip = n_elements(skip)                                                                                 ; count number of apertures to skip 
+    skiporder = sort(skip)                                                                                   ; get indices of skip such that elements are in ascending order
+    skip = skip[skiporder]                                                                                   ; rewrite skip so elements increase to avoid later loop issues
+
+    IF ( (useblue NE 'blue') AND (useblue NE 'altblue') ) THEN BEGIN              ; make sure user correctly specified which blue filter to use 
+      print, 'Specified blue filter does not exist. No cuts will be made.'          ; if not, tell user so and make no cuts 
+    ENDIF ELSE BEGIN                                                              ; if blue filter was specified correctly, proceed with cuts 
+
+      ; do cuts on whole structure if we don't have to skip any apertures 
+      IF (skip EQ -1) THEN BEGIN                                                    ; if no apertures should be skipped over when making the cut, 
+        FOR ap=0, naps-1 DO BEGIN                                                     ; for each aperture in the structure: 
+          IF (useblue EQ 'blue') THEN blue = apstruct(ap).blue                          ; use the "blue" tag if user specified "blue"
+          IF (useblue EQ 'altblue') THEN blue = apstruct(ap).altblue                    ; use the "altblue" tag if user specified "altblue"
+          xcolor = blue - apstruct(ap).mid                                              ; define the x axis of a color diagram (blue - middle filter)
+          ycolor = apstruct(ap).mid - apstruct(ap).galmags                              ; define the y axis of a color diagram (middle - red filter)      
+          bad = WHERE ( (ycolor LT (xcolor*m + b)) AND (ycolor GE c), ngals )           ; get indices of galaxies that fall below the straight-line cut 
+          IF (ngals EQ 0) THEN BEGIN                                                    ; if every galaxy in this aperture has a good color, 
+            print, 'All galaxies in this aperture have colors above the cut.'             ; tell the user so and don't remove any galaxies 
+          ENDIF ELSE BEGIN                                                              ; if there are any galaxies that don't make the cut, 
+            apstruct = remover(apstruct, ap, bad)                                         ; remove them from the structure 
+          ENDELSE                                                                       ; this aperture has now been filtered 
+        ENDFOR                                                                        ; all apertures have now been filtered 
+
+      ; if we do have to skip any apertures, break up the structure array into pieces
+      ; first piece of structure array: 
+      ENDIF ELSE IF (skip NE -1) THEN BEGIN                                         ; if at least one aperture should be skipped when making the cut, 
+        FOR ap=0, skip[0]-1 DO BEGIN                                                  ; for each aperture in the structure from start to first skip: 
+          IF (useblue EQ 'blue') THEN blue = apstruct(ap).blue                          ; use the "blue" tag if user specified "blue"
+          IF (useblue EQ 'altblue') THEN blue = apstruct(ap).altblue                    ; use the "altblue" tag if user specified "altblue"
+          xcolor = blue - apstruct(ap).mid                                              ; define the x axis of a color diagram (blue - middle filter)
+          ycolor = apstruct(ap).mid - apstruct(ap).galmags                              ; define the y axis of a color diagram (middle - red filter)      
+          bad = WHERE ( (ycolor LT (xcolor*m + b)) AND (ycolor GE c), ngals )           ; get indices of galaxies that fall below the straight-line cut 
+          IF (ngals EQ 0) THEN BEGIN                                                    ; if every galaxy in this aperture has a good color, 
+            print, 'All galaxies in this aperture have colors above the cut.'             ; tell the user so and don't remove any galaxies 
+          ENDIF ELSE BEGIN                                                              ; if there are any galaxies that don't make the cut, 
+            apstruct = remover(apstruct, ap, bad)                                         ; remove them from the structure 
+          ENDELSE                                                                       ; this aperture has now been filtered 
+        ENDFOR                                                                        ; apertures from 0 to first skip have been filtered 
+        ; middle piece(s) of structure array:
+        IF (nskip GT 1) THEN BEGIN                                                    ; if there's more than one aperture to be skipped, 
+          FOR skipap=1, nskip-2 DO BEGIN                                                ; loop over all the skips between the first and last ones 
+            FOR ap=skip[skipap-1]+1, skip[skipap]-1 DO BEGIN                              ; for each aperture in the structure between two skips: 
+              IF (useblue EQ 'blue') THEN blue = apstruct(ap).blue                          ; use the "blue" tag if user specified "blue"
+              IF (useblue EQ 'altblue') THEN blue = apstruct(ap).altblue                    ; use the "altblue" tag if user specified "altblue"
+              xcolor = blue - apstruct(ap).mid                                              ; define the x axis of a color diagram (blue - middle filter)
+              ycolor = apstruct(ap).mid - apstruct(ap).galmags                              ; define the y axis of a color diagram (middle - red filter)      
+              bad = WHERE ( (ycolor LT (xcolor*m + b)) AND (ycolor GE c), ngals )           ; get indices of galaxies that fall below the straight-line cut 
+              IF (ngals EQ 0) THEN BEGIN                                                    ; if every galaxy in this aperture has a good color, 
+                print, 'All galaxies in this aperture have colors above the cut.'             ; tell the user so and don't remove any galaxies 
+              ENDIF ELSE BEGIN                                                              ; if there are any galaxies that don't make the cut, 
+                apstruct = remover(apstruct, ap, bad)                                         ; remove them from the structure 
+              ENDELSE                                                                       ; this aperture has now been filtered 
+            ENDFOR                                                                        ; apertures between skips have been filtered
+          ENDFOR                                                                        ; all apertures from start to the last skip have been filtered 
+        ENDIF                                                                         ; if more that one aperture had to be skipped   
+        ; last piece of structure array: 
+        FOR ap=skip[-1]+1, naps-1 DO BEGIN                                            ; for each aperture in the structure from last skip to end: 
+          IF (useblue EQ 'blue') THEN blue = apstruct(ap).blue                          ; use the "blue" tag if user specified "blue"
+          IF (useblue EQ 'altblue') THEN blue = apstruct(ap).altblue                    ; use the "altblue" tag if user specified "altblue"
+          xcolor = blue - apstruct(ap).mid                                              ; define the x axis of a color diagram (blue - middle filter)
+          ycolor = apstruct(ap).mid - apstruct(ap).galmags                              ; define the y axis of a color diagram (middle - red filter)      
+          bad = WHERE ( (ycolor LT (xcolor*m + b)) AND (ycolor GE c), ngals )           ; get indices of galaxies that fall below the straight-line cut 
+          IF (ngals EQ 0) THEN BEGIN                                                    ; if every galaxy in this aperture has a good color, 
+            print, 'All galaxies in this aperture have colors above the cut.'             ; tell the user so and don't remove any galaxies 
+          ENDIF ELSE BEGIN                                                              ; if there are any galaxies that don't make the cut, 
+            apstruct = remover(apstruct, ap, bad)                                         ; remove them from the structure 
+          ENDELSE                                                                       ; this aperture has now been filtered 
+        ENDFOR                                                                        ; apertures from last skip to end have been filtered
+      ENDIF                                                                         ; if at least one aperture had to be skipped over 
+    ENDELSE                                                                     ; the "useblue" parameter was input correctly 
+
+    newfile = '/boomerang-data/alhall/GalaxiesInBlobs/LIONScatalogs/apertures/colorline/'+nameadd+'/'+filename+'_'+nameadd+'.fits'  ; make a new filename for the filtered structure
+    mwrfits, apstruct, newfile, /create                                                                                   ; write the filtered structure to a fits file 
+  END        ; of colorline procedure 
+
+
+
+
+
+
+
+
+
+  PRO colorgrid, filename, skip      ; plus other things 
+  ;---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------;
+  ; colorline procedure
+  ;  Reads in a FITS file created by the blobsampling or fieldsampling procedures and filters that file by ?????????????????????????????????????????
+  ; 
+  ; INPUT: filename - a string giving the name of a FITS file containing galaxy IDs within multiple apertures 
+  ;        ?????????????????????????????????????????????????????????????
+  ;        skip - an integer or array of integers giving the index/indices of a catalog to be skipped when applying cuts; to skip no indices, set skip to -1 
+  ;
+  ; OUTPUT: ?????????????????  
+  ;
+  ; Uses the remover function. 
+  ;
+  ; NOTE: This procedure is meant to be run by the makeacut procedure rather than being called on its own. 
+  ;
+  ;---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------;
+    FORWARD_FUNCTION remover                                                                                 ; notify IDL that this function will be used 
+    skiporder = sort(skip)                                                                                   ; get indices of skip such that elements are in ascending order
+    skip = skip[skiporder]                                                                                   ; rewrite skip so elements increase to avoid later loop issues
+    print, 'Color gridding has not been implemented yet. Sorry for the inconvenience.' 
+  END        ; of colorgrid procedure 
+
+
+
+
+
+
+
+
+
+  FUNCTION remover, apstruct, ap, bad 
+  ;---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------;
+  ; remover function
+  ;  Removes user-specified galaxies from an aperture structure (ie, one created by blobsampling or fieldsampling) by replacing their information with default values. 
+  ;
+  ; INPUT: apstruct - a structure containing galaxy IDs within multiple apertures
+  ;        ap - integer giving the aperture in apstruct in which to remove bad galaxies 
+  ;        bad - an integer or array of integers corresponding to the index/indices of galaxies in apstruct(ap) to be removed 
+  ;
+  ; OUTPUT: filters (ie, removes bad galaxies from) apstruct, then returns the filtered structure 
+  ; 
+  ; Uses no other functions nor procedures. 
+  ;
+  ;---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------;
+    apstruct(ap).galIDs[bad] = -1                                                                           ; remove bad galaxies' IDs from the structure
+    apstruct(ap).galz[bad] = -1.                                                                            ; remove bad galaxies' redshifts from the structure
+    apstruct(ap).galmags[bad] = 99.                                                                         ; remove bad galaxies' red magnitudes from the structure 
+    apstruct(ap).mid[bad] = 99.                                                                             ; remove bad galaxies' middle magnitudes from the structure 
+    apstruct(ap).blue[bad] = 99.                                                                            ; remove bad galaxies' blue magnitudes from the structure 
+    apstruct(ap).altblue[bad] = 99.                                                                         ; remove bad galaxies' other blue magnitudes from the structure 
+    RETURN, apstruct                                                                                        ; return the filtered structure 
+  END      ; of remover function 
 
 
 
@@ -273,7 +612,7 @@ END       ; of zfilter procedure
 
 
   FUNCTION get_galaxies, ra, dec, radius, data                                                                                                    
-  ;----------------------------------------------------------------------------------------------------------------------------------------------------------------------;
+  ;---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------;
   ; get_galaxies function                                   
   ;  Places an aperture in a specified location within a set of data and finds which galaxies in the data catalog fall within that aperture. 
   ;                                                                                        
@@ -287,7 +626,7 @@ END       ; of zfilter procedure
   ;      
   ; NOTES: The output is found by determining the distance between the aperture's center and each source, then requiring that distance to be less 
   ;           than the radius of the aperture.
-  ;----------------------------------------------------------------------------------------------------------------------------------------------------------------------;
+  ;---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------;
     distance = sqrt(  ( (ra - data.ra) * cos(dec*!dPI/180.) )^2. + (dec - data.dec)^2. )    ; Pythagorean theorem               
     galaxies_in_aperture = WHERE ((distance LT radius), n_galaxies)                         ; the sources have to be contained within the aperture 
     RETURN, galaxies_in_aperture      
@@ -302,7 +641,7 @@ END       ; of zfilter procedure
 
 
   PRO apfinder, npix_x, npix_y, ap_radius_pix, ap_radius, dim, bpm, hdr, ap_count, ap_x, ap_y, nbadpix, ntotalpix, ap_ra, ap_dec, blobcoords=blobcoords       
-  ;----------------------------------------------------------------------------------------------------------------------------------------------------------------------;                   
+  ;---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------;                
   ; apfinder procedure                                                                                                                                                   
   ;   Generates random RA and declination coordinates for an aperture to be placed in a field, then checks the field's bad pixel map (bpm)
   ;     to determine how much of the aperture is filled with bad pixels. If the aperture contains only bad pixels, it is discarded and a 
@@ -333,7 +672,7 @@ END       ; of zfilter procedure
   ;                 
   ; Uses no other procedures nor functions. 
   ;                      
-  ;----------------------------------------------------------------------------------------------------------------------------------------------------------------------;            
+  ;---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------;           
     ; SETUP
        ; We only want apertures with good pixels, so need to set up a WHILE loop that generates apertures until a good one comes up        
        repeatflag = 0.       ; this will ensure that apertures don't get wasted on areas with only bad pixels                                                                
@@ -341,7 +680,7 @@ END       ; of zfilter procedure
 
     ; Make random apertures until a usable one comes up          
     WHILE (repeatflag EQ 0.) DO BEGIN 
-                                                                                                                                   
+
       ; make a random aperture:                                                                                                                                           
          seed = !NULL      ; reset random seed to prevent corrupting random number sequence
          ap_x = floor(ap_radius_pix + (double(npix_x)-2.*ap_radius_pix)*randomu(seed))          ; generate a random x coordinate for aperture center         
@@ -354,7 +693,7 @@ END       ; of zfilter procedure
             xhi = ap_x + floor(ap_radius_pix)      ; right edge          
             ylo = ap_y - floor(ap_radius_pix)      ; bottom edge         
             yhi = ap_y + floor(ap_radius_pix)      ; top edge   
-         ; make sure the box dimensions match the dimensions of the aperture image (this gets weird because of fractions of pixels       
+         ; make sure the box dimensions match the dimensions of the aperture image (this gets weird because of fractions of pixels)       
             dimsize = size(dim)               
             IF ((xhi-xlo) NE (dimsize[1]-1.)) THEN BEGIN    ; if box & dim don't match in x size           
               xhi = ap_x + floor(ap_radius_pix) - 1.           
@@ -418,7 +757,7 @@ END       ; of zfilter procedure
 
 
   PRO readdata, blobs, fields, nblobs, nfields, ntotal  
-  ;----------------------------------------------------------------------------------------------------------------------------------------------------------------------;
+  ;---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------;
   ; readdata procedure
   ;   Reads files listing blobs and fields into structures and renames the structures' fields to be useful. Used to initialize other procedures. 
   ;
@@ -432,7 +771,7 @@ END       ; of zfilter procedure
   ;
   ; Uses the struct_replace_field procedure. 
   ;
-  ;----------------------------------------------------------------------------------------------------------------------------------------------------------------------;
+  ;---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------;
  
     ; read in the file containing all blob information
        blobs = read_csv('/boomerang-data/alhall/GalaxiesInBlobs/LIONScatalogs/blobs.csv', n_table_header=1)
@@ -451,6 +790,7 @@ END       ; of zfilter procedure
        struct_replace_field, blobs, 'FIELD12', blobs.FIELD12, newtag='redname'    ; name of the reddest filter used to observe the blob region 
        struct_replace_field, blobs, 'FIELD13', blobs.FIELD13, newtag='blobinfo'   ; name of the catalog containing all the magnitude, RA, DEC, etc info of sources* 
        struct_replace_field, blobs, 'FIELD14', blobs.FIELD14, newtag='pixelscale' ; pixel scale in arceseconds per pixel ("/px) for each blob image 
+       struct_replace_field, blobs, 'FIELD15', blobs.FIELD15, newtag='bpmtype'    ; indicator of whether bpm has bad pixels marked as 0s or 1s 
        nblobs = n_elements(blobs.blobname)                                        ; number of blobs in the blobs.csv file 
        ; * note: to use, must be preceded by '/boomerang-data/alhall/GalaxiesInBlobs/LIONSCatalogs/individual/'+ 
 
@@ -480,7 +820,7 @@ END       ; of zfilter procedure
   ; NOTE: THE FOLLOWING PROCEDURE WAS NOT WRITTEN BY AGNAR. HOWEVER, AGNAR DID EDIT IT.  
   ;
   PRO struct_replace_field, struct, tag, data, newtag=newtag
-  ;----------------------------------------------------------------------------------------------------------------------------------------------------------------------;
+  ;---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------;
   ; struct_replace_field procedure 
   ;   Changes the type, dimensionality, and contents of an existing structure field. The tag name may be changed in the process.
   ;
@@ -499,7 +839,7 @@ END       ; of zfilter procedure
   ;              The tag name for a field can be changed without altering the data:               IDL> struct_replace_field, clients, 'NMAE', clients.nmae, newtag='Name'
   ;    CREDIT: Valenti, 2003-Jul-20, initial coding
   ;
-  ;----------------------------------------------------------------------------------------------------------------------------------------------------------------------;
+  ;---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------;
     ; First, make sure user provided the right amount of input
        IF (n_params() LT 3) THEN BEGIN                                             ; if the user gave too little input 
          print, 'syntax: struct_replace_field, struct, tag, data [,newtag=]'          ; tell the user how to call this procedure properly 

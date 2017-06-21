@@ -2,11 +2,10 @@
 ; DENSITYGETTER.PRO 
 ;  Contains all modules used for getting the galaxy density within blobs and in fields. 
 ;  CONTENTS: 
-;      density----------------------------procedure   (main module for getting blob densities and average field densities) (WILL BE UPDATED AFTER MAKEACUT IS FINISHED) 
+;      density----------------------------procedure   (main module for getting blob densities and average field densities)
 ;      countgals--------------------------procedure   (main module for getting galaxy counts in apertures)
 ;      bin_galaxies-----------------------function   
 ;      Poisson_error----------------------function
-;      makeacut---------------------------function  (IN PROGRESS) 
 ;      readdata---------------------------procedure
 ;      struct_replace_field---------------procedure
 ;-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------;
@@ -14,7 +13,7 @@
 
 
 
-PRO density, blobFITSname, fieldFITSnames, ap_radius_arcsec, brightestmag, dimmestmag, binsize, outputname, cuttype=cuttype, key=key, band=band
+PRO density, blobFITSname, fieldFITSnames, ap_radius_arcsec, brightestmag, dimmestmag, binsize, outputname, band=band
 ;----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------;
 ; density procedure
 ;     Calculates galaxy number density and errors within blobs and fields for a specified magnitude band and type of color cut. 
@@ -27,8 +26,6 @@ PRO density, blobFITSname, fieldFITSnames, ap_radius_arcsec, brightestmag, dimme
 ;        binsize - the size of the magnitude bins in which density will be calculated
 ;        outputname - a string containing the desired name of the file that will be created by this procedure 
 ;        --
-;        cuttype - an optional string keyword which, if set, specifies a type of cut to make to the blob and field data 
-;        key - an optional variable-datatype keyword that must be set if the cuttype keyword is set; must follow guidelines from makeacut procedure's "key" keyword  
 ;        band - an optional string keyword specifying which magnitude band to use for binning galaxies; if this isn't set, the red band will be used 
 ;
 ; OUTPUT: DensityResults - a structure containing: 
@@ -38,10 +35,8 @@ PRO density, blobFITSname, fieldFITSnames, ap_radius_arcsec, brightestmag, dimme
 ;                            the error on that density (an array with nbins elements) 
 ;                          for all blobs and fields; this is saved as a FITS file named as specified by outputname 
 ;
-; Uses the bin_galaxies function, the Poisson_error function, the makeacut function, and the readdata procedure. 
+; Uses the bin_galaxies function, the Poisson_error function, and the readdata procedure. 
 ;   The latter of these uses the struct_replace_field procedure. 
-;
-; NOTE: If applying cuts, make sure to pick a name for the output file (outputname) that indicates which kind of cut was made and how. 
 ;
 ;----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------;
   ; SETUP 
@@ -108,11 +103,6 @@ PRO density, blobFITSname, fieldFITSnames, ap_radius_arcsec, brightestmag, dimme
                  truncated_blobcat.midmag[galaxy] = blobcat.midmag[galindex]
                  truncated_blobcat.bluemag[galaxy] = blobcat.bluemag[galindex] 
             ENDFOR     ; all the galaxies in/near the blob (ie, in truncated_blobcat) 
-
-            ; apply cuts to the truncated blobcat if desired 
-            IF (n_elements(cuttype) NE 0) THEN BEGIN                                ; if the user set the "cuttype" keyword,
-              truncated_blobcat = makeacut(truncated_blobcat, cuttype, key)           ; run the catalog through the makeacut function to make the specified cuts 
-            ENDIF                                                                   ; if the user wanted any membership cuts applied to the data 
        
          ; now we can bin up those galaxies and calculate density and errors in each bin to put in DensityResults 
             FOR mag=brightestmag, dimmestmag, binsize DO BEGIN        ; loop through the magnitude bins 
@@ -125,11 +115,11 @@ PRO density, blobFITSname, fieldFITSnames, ap_radius_arcsec, brightestmag, dimme
                 datamags = truncated_blobcat.bluemag        ; use the blue band for magnitudes 
               ENDIF      ; we've picked which magnitude band to use for binning galaxies 
               ; now bin galaxies and get densities 
-              ngalinbin = bin_galaxies(mag, mag+binsize, datamags)                                 ; number of galaxies in this bin 
-              ngalerrbin = Poisson_error(ngalinbin)                                                ; Poisson error on above number 
-              thisindex = WHERE(DensityResults(blob).mags EQ mag)                                 ; the array index for this magnitude bin
-              DensityResults(blob).densities[thisindex] = double(ngalinbin)/(!dPI*ap_radius^2.)    ; number density of galaxies in this bin 
-              DensityResults(blob).derrs[thisindex] = double(ngalerrbin)/(!dPI*ap_radius^2.)       ; error on above number density 
+              ngalinbin = bin_galaxies(mag, mag+binsize, datamags)                                                            ; number of galaxies in this bin 
+              ngalerrbin = Poisson_error(ngalinbin)                                                                           ; Poisson error on above number 
+              thisindex = WHERE(DensityResults(blob).mags EQ mag)                                                             ; the array index for this magnitude bin
+              DensityResults(blob).densities[thisindex] = double(ngalinbin)/(!dPI*ap_radius^2.*blobapertures(blob).weight)    ; number density of galaxies in this bin 
+              DensityResults(blob).derrs[thisindex] = double(ngalerrbin)/(!dPI*ap_radius^2.*blobapertures(blob).weight)       ; error on above number density 
             ENDFOR   ; all magnitude bins 
 
        ENDELSE       ; this blob has galaxies in it
@@ -185,11 +175,6 @@ STOP
                 apcat.altbluemag[galaxy] = fieldcat.altbluemag[galindex] 
                 apcat.z[galaxy] = fieldcat.z[galindex] 
            ENDFOR     ; all the galaxies in this aperture 
-
-           ; apply cuts to the apcat if desired 
-           IF (n_elements(cuttype) NE 0) THEN BEGIN      ; if the user set the "cuttype" keyword,
-             apcat = makeacut(apcat, cuttype, key)         ; run the catalog through the makeacut function to make the specified cuts 
-           ENDIF                                         ; if the user wanted any membership cuts applied to the data 
 
            ; now we can bin up those galaxies and calculate density and errors in each bin to put in ap_densities 
            FOR mag=brightestmag, dimmestmag, binsize DO BEGIN        ; loop through the magnitude bins 
@@ -255,7 +240,7 @@ END      ; end of density procedure
 
 
 
-PRO countgals, FITSname, brightestmag, dimmestmag, binsize, outputname, cuttype=cuttype, key=key
+PRO countgals, FITSname, brightestmag, dimmestmag, binsize, outputname
 ;----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------;
 ; countgals procedure 
 ;  Goes through a set of apertures and counts the number of galaxies per magnitude bin in each aperture, then exports this information as a FITS file. 
@@ -265,13 +250,10 @@ PRO countgals, FITSname, brightestmag, dimmestmag, binsize, outputname, cuttype=
 ;        dimmestmag - the upper (dimmer) bound on galaxy magnitudes to be binned 
 ;        binsize - the size of the magnitude bins in which density will be calculated
 ;        outputname - a string containing the desired name of the FITS file that will be created by this procedure 
-;        --
-;        cuttype - an optional string keyword which, if set, specifies a type of cut to make to the blob and field data 
-;        key - an optional variable-datatype keyword that must be set if the cuttype keyword is set; must follow guidelines from makeacut procedure's "key" keyword   
 ;
 ; OUTPUT: countstruct - a structure containing each aperture's name and the number of galaxies it has in each magnitude bin 
 ;
-; Uses the makeacut function (optional) and the bin_galaxies function. 
+; Uses the bin_galaxies function. 
 ;
 ;----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------;
   ; read in data and define parameters based on input 
@@ -304,11 +286,7 @@ PRO countgals, FITSname, brightestmag, dimmestmag, binsize, outputname, cuttype=
     IF (napgals LE 0) THEN BEGIN                                                        ; if there are no galaxies in the aperture, 
       countstruct(ap).galcounts[*] = 0                                                    ; then all bins contain 0 galaxies 
     ENDIF ELSE BEGIN                                                                    ; if this aperture DOES contain at least one galaxy, 
-      ; apply cuts to the aperture catalog if desired 
-      IF (n_elements(cuttype) NE 0) THEN BEGIN                                                 ; if the user set the "cuttype" keyword,
-        apertures = makeacut(apertures, cuttype, key)                                            ; run the catalog through the makeacut function to make the specified cuts 
-      ENDIF                                                                                    ; if the user wanted any membership cuts applied to the data 
-      ; now get number of galaxies in each bin to fill in 'galcounts' array 
+      ; get number of galaxies in each bin to fill in 'galcounts' array 
       FOR mag=brightestmag, dimmestmag, binsize DO BEGIN                                       ; loop through the magnitude bins 
         index = WHERE(mags EQ mag)                                                               ; the array index for this magnitude bin
         countstruct(ap).galcounts[index] = bin_galaxies(mag, mag+binsize, apertures(ap).galmags)   ; put number of galaxies in this bin into corresponding index of galcounts array
@@ -381,145 +359,6 @@ END
 
 
 
-FUNCTION makeacut, catalog, cuttype, key
-;------------------------------------------------------------------------------------------------------------------------------------------------------------------------------;
-; makeacut function
-;    Makes a user-specified cut to the galaxy membership in a specified catalog. 
-;
-; INPUT: catalog - a catalog containing information about galaxies in some image of a blob or field 
-;        cuttype - the kind of cut to be made to catalog to turn it into newcatalog 
-;        key - the information needed for the user to make the specified cut; it can have the following formats: 
-;            targetz - in this case, cuttype must equal 'z' and targetz is a float giving the redshift at which we want to find galaxies (so all other redshifts are cut out) 
-;            linestuff - in this case, cuttype must equal 'colorline' and linestuff is a 4-element list, the first element being the slope of the color cut line (float), 
-;                   the second element being the y-intercept of the color cut line (float), the third element being a cap value above which all galaxies are kept (float),  
-;                   and the fourth element being a string specifying which blue band to use for colors if there are multiple blue bands (should be 'blue' or 'altblue') 
-;            gridstuff - in this case, cuttype must equal 'colorgrid' and gridstuff is ????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????
-;
-; OUTPUT: newcatalog - a catalog with all the same fields as the original input catalog, but with some galaxies removed as per the specified cut
-;
-; Uses no other functions nor procedures. 
-;
-; NOTES: 
-;  CATALOG FORMAT: blob catalogs have tags (ID, ra, dec, redmag, midmag, bluemag); field catalogs have tags (ID, ra, dec, redmag, midmag, bluemag, altbluemag, z)  
-;  SYNTAX: Redshift cuts:   newapcat = makeacut(apcat, 'z', key=2.3)  
-;          Line color cuts: cutblobcat = makeacut( truncated_blobcat, 'colorline', key=list(blobs.m[blob], blobs.b[blob], blobs.cap[blob], 'blue') )
-;                       or  cutapcat = makeacut( apcat, 'colorline', key=list(blobs.m[1], blobs.b[1], blobs.cap[1], 'altblue') )    this would be field for PRG2
-;          Grid color cuts: cutblobcat = makeacut(truncated_blobcat, 'colorgrid', key= )????????????????????????????????????????????????????????????????????????????????????????????????????????????????
-;                   
-;-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------;
-  IF ( (cuttype NE 'z') OR (cuttype NE 'colorline') OR (cuttype NE 'colorgrid') ) THEN BEGIN      ; if an invalid cut type was supplied by user 
-    print, 'Invalid cut type given. No cuts will be made.'                                          ; tell the user so 
-    newcatalog = catalog                                                                            ; make no cuts; just return the original catalog unaltered
-  ; now move on to the three different types of cuts 
-
-  ENDIF ELSE IF (cuttype EQ 'z') THEN BEGIN                                                       ; REDSHIFT CUTS 
-    valid = tag_exist(catalog, 'z')                                                                 ; check to see if the catalog even has redshift info 
-    IF (valid EQ 0b) THEN BEGIN                                                                     ; if the catalog doesn't have redshift info, 
-      print, 'Input catalog does not contain redshift information. No cuts will be made.'             ; tell the user so 
-      newcatalog = catalog                                                                            ; make no cuts; just return the original catalog unaltered
-    ENDIF ELSE IF (n_elements(key) NE 1) THEN BEGIN                                                 ; check to make sure user specified a (single) target z to use for cuts
-      print, 'No target redshift specified. No cuts will be made.'                                    ; if no targetz was specified, tell the user so
-      newcatalog = catalog                                                                            ; make no cuts; just return the original catalog unaltered 
-    ENDIF ELSE IF ( (size(key, /type) NE 4) OR (size(key, /type) NE 5) ) THEN BEGIN                 ; if the user gave a keyword that wasn't a float (or double) indicating z,
-      print, 'Keyword has incorrect data type. No cuts will be made.'                                 ; tell the user so
-      newcatalog = catalog                                                                            ; make no cuts; just return the original catalog unaltered 
-    ENDIF ELSE BEGIN                                                                                ; if the catalog DOES have redshift info and a targetz was supplied, 
-      goodz = WHERE( (catalog.z GE (key - 0.15)) AND (catalog.z LE (key + 0.15)) , ngals)           ; find galaxies at the target redshift 
-      cattags = tag_names(catalog)                                                                  ; get the new catalog's tag names from the original catalog
-      ncattags = n_tags(catalog)                                                                    ; see how many fields the original catalog has in total 
-      IF (ngals EQ 0) THEN BEGIN                                                                    ; if there are no galaxies with the specified redshift, 
-        print, 'No galaxies in the catalog have the specified redshift.'                                ; tell the user so 
-        newcatalog = {ID:[-1]}                                                                          ; set a -1 as the first field (ID) of the new cut-applied catalog 
-        FOR i=1, ncattags-1 DO BEGIN                                                                    ; loop over all the other tags in the original catalog
-          newcatalog = create_struct(newcatalog, cattags[i], 0.)                                          ; add this tag onto the new catalog, with value of 0
-        ENDFOR                                                                                          ; the new catalog now has all the same fields as the old one
-      ENDIF ELSE BEGIN                                                                                ; if there ARE galaxies with the specified redshift, 
-        newcatalog = {ID:catalog.(0)[goodz]}                                                            ; set up the first field of the new cut-applied catalog
-        FOR i=1, ncattags-1 DO BEGIN                                                                    ; loop over all the other tags in the original catalog
-          newcatalog = create_struct(newcatalog, cattags[i], catalog.(i)[goodz])                          ; add this tag onto the new catalog, with redshift cut applied
-        ENDFOR                                                                                          ; the new catalog now has all the same fields as the old one
-      ENDELSE                                                                                         ; the original catalog had galaxies at the right redshift
-    ENDELSE                                                                                         ; the original catalog contained redshift information
-    ; we've now made redshift cuts to the original catalog and newcatalog is complete 
-
-  ENDIF ELSE IF (cuttype EQ 'colorline') THEN BEGIN                                               ; SIMPLE STRAIGHT-LINE COLOR CUTS
-    validR = tag_exist(catalog, 'redmag')                                                           ; make sure catalog has mags in a red filter 
-    validM = tag_exist(catalog, 'midmag')                                                           ; make sure catalog has mags in a middle filter  
-    validB = tag_exist(catalog, 'bluemag')                                                          ; make sure catalog has mags in a blue filter 
-    validA = tag_exist(catalog, 'altbluemag')                                                       ; check if catalog also has mags in another blue filter 
-    IF ( (validR EQ 0b) OR (validM EQ 0b) OR ((validB EQ 0b) AND (validA EQ 0b)) ) THEN BEGIN       ; if there aren't three usable filters in the catalog, 
-      print, 'Input catalog does not contain enough filters. No cuts will be made.'                   ; tell the user so
-      newcatalog = catalog                                                                            ; make no cuts; just return the original catalog unaltered
-    ENDIF ELSE IF (n_elements(key) NE 4) THEN BEGIN                                                 ; make sure user supplied enough line info to make cuts
-      print, 'Not enough information given to make simple color cuts. No cuts will be made.'          ; if not, tell user so
-      newcatalog = catalog                                                                            ; make no cuts; just return the original catalog unaltered 
-    ENDIF ELSE BEGIN                                                                                  ; if catalog has enough filters and linestuff has enough info, proceed
-      m = key[0]                                                                                      ; define slope of color cut line 
-      b = key[1]                                                                                      ; define y-intercept of color cut line 
-      c = key[2]                                                                                      ; define cap value of color cut line 
-      useblue = key[3]                                                                                ; define string for which blue filter to use 
-      mtype = size(m, /type)                                                                          ; get type code for m (needs to be 4 or 5 for float or double)
-      btype = size(b, /type)                                                                          ; get type code for b (needs to be 4 or 5 for float or double)
-      ctype = size(c, /type)                                                                          ; get type code for c (needs to be 4 or 5 for float or double) 
-      ; do some more checking for mistakes now
-      IF ( (useblue NE 'blue') AND (useblue NE 'altblue') ) THEN BEGIN                                ; make sure user correctly specified which blue filter to use 
-        print, 'Specified blue filter does not exist. No cuts will be made.'                            ; if not, tell user so
-        newcatalog = catalog                                                                            ; make no cuts; just return the original catalog unaltered 
-      ENDIF ELSE IF ( (useblue EQ 'altblue') AND (validA EQ 0b) ) THEN BEGIN                          ; make sure user didn't specify a blue filter that isn't in the catalog
-        print, 'Catalog does not contain specified blue filter. No cuts will be made.'                  ; if so, tell user so
-        newcatalog = catalog                                                                            ; make no cuts; just return the original catalog unaltered 
-      ENDIF ELSE IF ((mtype NE 4) OR (mtype NE 5)) THEN BEGIN                                          ; make sure specified line slope is a float (or double) 
-        print, 'Invalid slope provided for cut line. No cuts will be made.'                             ; if not, tell user so
-        newcatalog = catalog                                                                            ; make no cuts; just return the original catalog unaltered 
-      ENDIF ELSE IF ((btype NE 4) OR (btype NE 5)) THEN BEGIN                                          ; make sure specified line y-intercept is a float (or double) 
-        print, 'Invalid y-intercept provided for cut line. No cuts will be made.'                       ; if not, tell user so
-        newcatalog = catalog                                                                            ; make no cuts; just return the original catalog unaltered 
-      ENDIF ELSE IF ((ctype NE 4) OR (ctype NE 5)) THEN BEGIN                                          ; make sure specified line cap is a float (or double) 
-        print, 'Invalid cap value provided for cut line. No cuts will be made.'                         ; if not, tell user so
-        newcatalog = catalog                                                                            ; make no cuts; just return the original catalog unaltered 
-      ENDIF ELSE BEGIN                                                                                ; if all necessary info was provided and looks good, proceed 
-        ; now we can do the actual cuts 
-        IF (useblue EQ 'blue') THEN blue = catalog.bluemag                                            ; use the "bluemag" tag if user specified "blue"
-        IF (useblue EQ 'altblue') THEN blue = catalog.altbluemag                                      ; use the "altbluemag" tag if user specified "altblue"
-        xcolor = blue - catalog.midmag                                                                  ; define the x axis of a color diagram (blue - middle filter)
-        ycolor = catalog.midmag - catalog.redmag                                                        ; define the y axis of a color diagram (middle - red filter)      
-        good = WHERE ((ycolor GE (xcolor*m + b)) OR (ycolor GE c), ngals)                               ; apply the cut using the line defined by linestuff 
-        cattags = tag_names(catalog)                                                                    ; get the new catalog's tag names from the original catalog
-        ncattags = n_tags(catalog)                                                                      ; see how many fields the original catalog has in total 
-        IF (ngals EQ 0) THEN BEGIN                                                                      ; if there are no galaxies surviving the cut, 
-          print, 'No galaxies in the catalog have colors above the cut.'                                  ; tell the user so
-          newcatalog = {ID:[-1]}                                                                          ; set a -1 as the first field (ID) of the new cut-applied catalog 
-          FOR i=1, ncattags-1 DO BEGIN                                                                    ; loop over all the other tags in the original catalog
-            newcatalog = create_struct(newcatalog, cattags[i], 0.)                                          ; add this tag onto the new catalog, with value of 0
-          ENDFOR                                                                                          ; the new catalog now has all the same fields as the old one
-        ENDIF ELSE BEGIN                                                                                ; if there ARE galaxies that survive the cut 
-          newcatalog = {ID:catalog.(0)[good]}                                                             ; set up the first field of the new cut-applied catalog
-          FOR i=1, ncattags-1 DO BEGIN                                                                    ; loop over all the other tags in the original catalog
-            newcatalog = create_struct(newcatalog, cattags[i], catalog.(i)[good])                           ; add this tag onto the new catalog, with color cut applied
-          ENDFOR                                                                                          ; the new catalog now has all the same fields as the old one
-        ENDELSE                                                                                         ; there were galaxies surviving the simple color cut 
-      ENDELSE                                                                                         ; all necessary info was provided and correct 
-    ENDELSE                                                                                         ; the catalog and linestuff both contained enough info for these cuts
-    ; we've now made simple color cuts to the original catalog and newcatalog is complete 
-
-  ENDIF ELSE IF (cuttype EQ 'colorgrid') THEN BEGIN                                               ; PROBABILITY-GRID COLOR CUTS 
-    print, 'Colorgrid is still a work in progress. No cuts will be made. Sorry for the inconvenience.' ;??????????????????????????????????????????????????????????????????????????????????????????????????????
-    newcatalog = catalog
-  ENDIF 
-
-  ; by now, a new catalog has been generated for every possible user input, so return that and we're done 
-  RETURN, newcatalog 
-
-END      ; of makeacut function
-
-
-
-
-
-
-
-
-
 PRO readdata, blobs, fields, nblobs, nfields, ntotal  
 ;------------------------------------------------------------------------------------------------------------------------------------------------------------------------------;
 ; readdata procedure
@@ -554,6 +393,7 @@ PRO readdata, blobs, fields, nblobs, nfields, ntotal
      struct_replace_field, blobs, 'FIELD12', blobs.FIELD12, newtag='redname'    ; name of the reddest filter used to observe the blob region 
      struct_replace_field, blobs, 'FIELD13', blobs.FIELD13, newtag='blobinfo'   ; name of the catalog containing all the magnitude, RA, DEC, etc info of sources* 
      struct_replace_field, blobs, 'FIELD14', blobs.FIELD14, newtag='pixelscale' ; pixel scale in arceseconds per pixel ("/px) for each blob image 
+     struct_replace_field, blobs, 'FIELD15', blobs.FIELD15, newtag='bpmtype'    ; indicator of whether bpm has bad pixels marked as 0s or 1s 
      nblobs = n_elements(blobs.blobname)                                        ; number of blobs in the blobs.csv file 
      ; * note: to use, must be preceded by '/boomerang-data/alhall/GalaxiesInBlobs/LIONSCatalogs/individual/'+ 
 
