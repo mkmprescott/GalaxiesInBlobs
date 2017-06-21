@@ -7,10 +7,11 @@ nApertures = 10000.
 brightestmag = 22.
 dimmestmag = 30.
 binsize = 0.5
-blobFITSname =  'allblobs_mags_z'                                           ; will be a fits file 
-GOODSSfieldFITSname = 'GOODSSapertures_10arcsec_10000aps_mags_z'            ; will be a fits file 
-GOODSNfieldFITSname = 'GOODSNapertures_10arcsec_10000aps_mags_z'            ; will be a fits file
-densityFITSname = 'densities_ZCUT3p157'                               ; will be both a fits file and a png, after modifications
+
+blobFITSname =  'allblobs'                                            ; will be a fits file 
+GOODSSfieldFITSname = 'GOODSSapertures_10arcsec_10000aps'            ; will be a fits file 
+GOODSNfieldFITSname = 'GOODSNapertures_10arcsec_10000aps'            ; will be a fits file
+densityFITSname = 'densities'                               ; will be both a fits file and a png, after modifications
 countFITSnames = ['allblobs_galcounts_10arcsec','GOODSSaps_galcounts_10arcsec_10000aps','GOODSNaps_galcounts_10arcsec_10000aps']          ; will be both fits files and pngs 
 band='red'
 magband = 'F140W'
@@ -22,10 +23,12 @@ histnameA = 'GOODSS_10arcsec_10000aps_ngals'
 histnameB = 'GOODSN_10arcsec_10000aps_ngals'
 histnamebin = 'GOODSS_10arcsec_10000aps_ngals_mag25'
 
+
+
 ;   ; get galaxy IDs in blobs and random field apertures 
-;   blobsampling, ap_radius_arcsec, blobFITSname
-;   fieldsampling, ap_radius_arcsec, nApertures, GOODSSfieldFITSname
-;   fieldsampling, ap_radius_arcsec, nApertures, GOODSNfieldFITSname 
+   blobsampling, ap_radius_arcsec, blobFITSname
+   fieldsampling, ap_radius_arcsec, nApertures, GOODSSfieldFITSname, indextosample=0
+   fieldsampling, ap_radius_arcsec, nApertures, GOODSNfieldFITSname, indextosample=1
 
 ;   ; get the same as above but only for z=2.3 galaxies 
 ;   zfilter, blobFITSname, z, zerr, zstring
@@ -49,10 +52,10 @@ histnamebin = 'GOODSS_10arcsec_10000aps_ngals_mag25'
 ;   densityFITSnameB = densityFITSname+'_z'+zstring+ '_' + band    ; because density procedure alters the filename it's given 
 ;   densityplot, densityFITSnameB, magband, 0                     ;, indicestoplot=[0,12], autosave='y'
 
-   ; make histograms 
-   makehist, 'allblobs_galcounts_10arcsec', 'GOODSSaps_galcounts_10arcsec_10000aps', histnameA, 1
-   makehist, 'allblobs_galcounts_10arcsec', 'GOODSNaps_galcounts_10arcsec_10000aps', histnameB, 1
-   makehist, 'allblobs_galcounts_10arcsec', 'GOODSSaps_galcounts_10arcsec_10000aps', histnamebin, 1, magbin=25.
+;   ; make histograms 
+;   aphist, 'allblobs_galcounts_10arcsec', 'GOODSSaps_galcounts_10arcsec_10000aps', 'GOODS-S apertures', histnameA, 1
+;   aphist, 'allblobs_galcounts_10arcsec', 'GOODSNaps_galcounts_10arcsec_10000aps', 'GOODS-N apertures', histnameB, 2
+;   aphist, 'allblobs_galcounts_10arcsec', 'GOODSSaps_galcounts_10arcsec_10000aps', 'GOODS-S apertures', histnamebin, 1, magbin=25.
 
 
 ; remember, to call this, inside IDL type:  @littlescript
