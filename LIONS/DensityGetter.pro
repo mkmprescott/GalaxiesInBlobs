@@ -127,7 +127,7 @@ PRO density, blobFITSname, fieldFITSnames, ap_radius_arcsec, brightestmag, dimme
      ; now that we have density results for all mag bins for this blob, we can move on to the next blob 
      ENDFOR     ; all the blobs
 
-STOP
+;STOP
 
   ; FIELD DENSITIES
      FOR field=0, nfields-1 DO BEGIN               ; since each field has its own FITS file, start off with a loop 

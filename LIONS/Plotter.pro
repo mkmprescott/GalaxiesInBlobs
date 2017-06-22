@@ -16,7 +16,7 @@
 
 
 PRO densityplot, file, magband, windownumber, indicestoplot=indicestoplot, autosave=autosave
-;---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------; 
+;-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------; 
 ; densityplot procedure
 ;   Makes plots of galaxy number density vs magnitude for a user-specified blob and overplots the galaxy density in the field for comparison.
 ;
@@ -34,7 +34,7 @@ PRO densityplot, file, magband, windownumber, indicestoplot=indicestoplot, autos
 ;
 ; Uses the plotsave procedure. 
 ;
-;---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------; 
+;-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------; 
 
   ; SETUP 
      plotsym, 0, 1, /fill            ; plotting symbol: make the psym=8 symbol a filled circle for our plots 
@@ -166,8 +166,8 @@ END          ; of densityplot procedure
 
 
 
-PRO aphist, blobsfile, fieldapsfile, fieldname, outputname, windownumber, magbin=magbin, plotblobs=plotblobs, magband=magband, autosave=autosave
-;---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------; 
+PRO aphist, blobsfile, fieldapsfile, fieldname, outputname, windownumber=windownumber, magbin=magbin, plotblobs=plotblobs, magband=magband, autosave=autosave
+;-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------; 
 ; aphist procedure                                                                
 ;   Makes a histogram showing how galaxy counts in random field apertures compare to the number of galaxies in blobs. 
 ;
@@ -175,8 +175,8 @@ PRO aphist, blobsfile, fieldapsfile, fieldname, outputname, windownumber, magbin
 ;        fieldapsfile - string containing the name of a file made by the countgals procedure containing number of galaxies per mag bin in random apertures in a field  
 ;        fieldname - string containing the name of the field associated with fieldapsfile 
 ;        outputname - string containing the name of the png that will be created by this procedure 
-;        windownumber - an integer specifying a unit number for the plot window (in case user wants to run this code multiple times and see all plots side-by-side) 
 ;        --
+;        windownumber - optional integer specifying a unit number for the plot window (in case user wants to run this code multiple times and see all plots side-by-side) 
 ;        magbin - optional float giving the lower bound of a magnitude bin in which to count galaxies; if not set, total number of galaxies across all bins will be used 
 ;        plotblobs - optional integer or array of integers specifying the indices in the blob aperture file to plot when overplotting blobs; if unspecified, all blobs are shown 
 ;        magband - an optional string giving the magnitude band being used to bin the galaxies, for labeling the plot's x-axis if the 'bin' keyword is set
@@ -188,7 +188,7 @@ PRO aphist, blobsfile, fieldapsfile, fieldname, outputname, windownumber, magbin
 ;
 ; Uses the plotsave procedure. 
 ;                                                                            
-;---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------; 
+;-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------; 
 
   ; SETUP
     ; data: 
@@ -251,7 +251,8 @@ PRO aphist, blobsfile, fieldapsfile, fieldname, outputname, windownumber, magbin
 
   ; MAKE THE PLOT 
     ; set up window for the plot
-     window, windownumber, retain=2, xsize=700., ysize=550. 
+     IF (n_elements(windownumber) NE 1) THEN windownumber=0       ; determine window number if it wasn't specified or was entered incorrectly 
+     window, windownumber, retain=2, xsize=700., ysize=550.       ; open the window 
     ; plot the field data 
      ;         | data            | colors                              | text                        | text properties            | line properties 
      plothist, aptotals, bin=1., background=255, color=0, axiscolor=0, xtitle=xtitle, ytitle=ytitle, charsize = 2.5, charthick=2, thick=2   ; plot the field apertures as a histogram
@@ -262,6 +263,10 @@ PRO aphist, blobsfile, fieldapsfile, fieldname, outputname, windownumber, magbin
          oplot, [blob_ngal, blob_ngal], [0., 1000.], linestyle=linestyle[blob], thick=2, color=colors[blob]              ; add a line for this blob to the plot
          ;xyouts, blob_ngal+1., (200.*(blob+1.)), blobaps(blob).name, color=0, charsize=1.5                              ; label blob line - OBSOLETE 
        ENDFOR                                                                                                          ; all the blobs 
+       ; add a legend 
+        ;       | labels                   | properties of legend lines                                     | properties of legend text
+        legend, [blobaps.name, fieldname], color=[colors,0], linestyle=[linestyle,0], thick=2., number=0.1, textcolor=0, charsize=1.1, charthick=1, /left, $
+          /box, outline_color=0.,position=[0.63,0.89], /normal      ; properties and location of legend box  
      ENDIF ELSE BEGIN                                                                                                ; if user did specify specific blobs to plot, 
        FOR index=0, n_elements(plotblobs)-1 DO BEGIN                                                                   ; loop over just the blobs the user wants to plot 
          blob = plotblobs[index]                                                                                         ; get the index of this blob from the plotblobs array
@@ -269,11 +274,11 @@ PRO aphist, blobsfile, fieldapsfile, fieldname, outputname, windownumber, magbin
          oplot, [blob_ngal, blob_ngal], [0., 1000.], linestyle=linestyle[blob], thick=2, color=colors[blob]              ; add a line for this blob to the plot
          ;xyouts, blob_ngal+1., (200.*(blob+1.)), blobaps(blob).name, color=0, charsize=1.5                              ; label blob line - OBSOLETE 
        ENDFOR                                                                                                          ; all user-specified blobs 
+       ; add a legend 
+        ;       | labels                              | properties of legend lines                                     | properties of legend text
+        legend, [blobaps(plotblobs).name, fieldname], color=[colors[plotblobs],0], linestyle=[linestyle[plotblobs],0], thick=2, number=0.1, textcolor=0, charsize=1.1, charthick=1, /left, $
+          /box, outline_color=0.,position=[0.63,0.89], /normal      ; properties and location of legend box  
      ENDELSE                                                                                                         ; plotblobs keyword was set (user only wanted some blobs)     
-    ; add a legend 
-     ;       | labels                   | properties of legend lines                                     | properties of legend text
-     legend, [blobaps.name, fieldname], color=[colors,0], linestyle=[linestyle,0], thick=2., number=0.1, textcolor=0, charsize=1.1, charthick=1, /left, $
-       /box, outline_color=0.,position=[0.63,0.89], /normal      ; properties and location of legend box  
 
 
   ; SAVE THE PLOT 

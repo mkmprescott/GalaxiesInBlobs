@@ -6,7 +6,7 @@
 ;      fieldsampling----------------------procedure   (main module for fields) 
 ;      makeacut---------------------------procedure   (main module for making cuts) IN PROGRESS
 ;      zfilter----------------------------procedure 
-;      colorline--------------------------procedure    IN PROGRESS 
+;      colorline--------------------------procedure 
 ;      colorgrid--------------------------procedure    IN PROGRESS
 ;      get_galaxies-----------------------function
 ;      apfinder---------------------------procedure 
@@ -306,12 +306,12 @@ PRO makeacut, catalog, cuttype, parameters, skip
 ; Uses the zfilter procedure, the colorline procedure, and the colorgrid procedure. 
 ;
 ; NOTES: See the zfilter, colorline, and colorgrid procedure for details regarding this procedure's "parameters" argument. 
-;          For zfilter (cuttype = 'z'), parameters should be: list(z, zerr, zstring) 
+;          For zfilter (cuttype = 'z'), parameters should be: list(z, zerr) 
 ;          For colorline (cuttype = 'colorline'), parameters should be: list(m, b, c, useblue, nameadd) 
 ;          For colorgrid (cuttype = 'colorgrid'), parameters should be: ???????????????????????????????????????????????????????????????????????????????????????????????????????????????????????
 ;
 ;--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------;
-  ; make sure the "skip" argument is valid before doing anything else 
+  ; read in the input structure and make sure all main arguments are valid before doing anything else 
   struct = mrdfits('/boomerang-data/alhall/GalaxiesInBlobs/LIONScatalogs/apertures/'+catalog+'.fits',1) ; read in the catalog to see how many apertures are in it
   napertures = n_elements(struct)                                                                       ; count the number of apertures in the catalog 
   integertypes = [2, 3, 12, 13, 14, 15]                                                                 ; make an array of all the different IDL type codes for integers
@@ -329,31 +329,29 @@ PRO makeacut, catalog, cuttype, parameters, skip
   ; now make sure "cuttype" argument is valid 
   ENDIF ELSE IF ( size(cuttype, /type) NE 7 ) THEN BEGIN                                                      ; if cuttype isn't a string, 
     print, 'Invalid data type for "cuttype" argument. This variable must be a string. No cuts will be made.'    ; tell the user so and make no cuts 
-  ENDIF ELSE IF ( (cuttype NE 'z') OR (cuttype NE 'colorline') OR (cuttype NE 'colorgrid') ) THEN BEGIN      ; if an invalid cut type was supplied by user 
+  ENDIF ELSE IF ( (cuttype NE 'z') AND (cuttype NE 'colorline') AND (cuttype NE 'colorgrid') ) THEN BEGIN     ; if an invalid cut type was supplied by user 
     print, 'Invalid cut type given. No cuts will be made.'                                                      ; tell the user so and make no cuts 
   ; now move on to the three different types of cuts 
 
   ENDIF ELSE IF (cuttype EQ 'z') THEN BEGIN                                                       ; REDSHIFT CUTS 
-    IF (n_elements(parameters) NE 3) THEN BEGIN                                                          ; if wrong number of parameters given for this kind of cut, 
+    IF (n_elements(parameters) NE 2) THEN BEGIN                                                          ; if wrong number of parameters given for this kind of cut, 
       print, 'Incorrect number of parameters. No cuts will be made.'                                       ;  tell the user so and make no cuts 
-    ENDIF ELSE IF ( (size(parameters[0], /type) NE 4) OR (size(parameters[0], /type) NE 5) ) THEN BEGIN  ; if the user's z isn't a float or double (ie, if it has wrong data type), 
+    ENDIF ELSE IF ( (size(parameters[0], /type) NE 4) AND (size(parameters[0], /type) NE 5) ) THEN BEGIN ; if the user's z isn't a float or double (ie, if it has wrong data type), 
       print, 'Redshift z has incorrect data type. No cuts will be made.'                                   ; tell the user so and make no cuts 
-    ENDIF ELSE IF ( (size(parameters[1], /type) NE 4) OR (size(parameters[1], /type) NE 5) ) THEN BEGIN  ; if the user's zerr isn't a float or double (ie, if it has wrong data type), 
+    ENDIF ELSE IF ( (size(parameters[1], /type) NE 4) AND (size(parameters[1], /type) NE 5) ) THEN BEGIN ; if the user's zerr isn't a float or double (ie, if it has wrong data type), 
       print, 'Redshift range zerr has incorrect data type. No cuts will be made.'                          ; tell the user so and make no cuts 
-    ENDIF ELSE IF (size(parameters[2], /type) NE 7) THEN BEGIN                                           ; if zstring isn't a string (ie, if it has wrong data type), 
-      print, 'Redshift string zstring has incorrect data type. No cuts will be made.'                      ; tell the user so and make no cuts 
     ENDIF ELSE BEGIN                                                                                     ; if all the right parameters were given, 
-      zfilter, catalog, parameters[0], parameters[1], parameters[2], skip                                  ; run zfilter procedure on the catalog 
+      zfilter, catalog, parameters[0], parameters[1], skip                                                 ; run zfilter procedure on the catalog 
     ENDELSE                                                                                              ; redshift cuts are done 
 
   ENDIF ELSE IF (cuttype EQ 'colorline') THEN BEGIN                                               ; SIMPLE STRAIGHT-LINE COLOR CUTS
     IF (n_elements(parameters) NE 5) THEN BEGIN                                                          ; if wrong number of parameters given for this kind of cut, 
       print, 'Incorrect number of parameters. No cuts will be made.'                                       ;  tell the user so and make no cuts  
-    ENDIF ELSE IF ( (size(parameters[0], /type) NE 4) OR (size(parameters[0], /type) NE 5) ) THEN BEGIN  ; if the user's m isn't a float or double (ie, if it has wrong data type), 
+    ENDIF ELSE IF ( (size(parameters[0], /type) NE 4) AND (size(parameters[0], /type) NE 5) ) THEN BEGIN ; if the user's m isn't a float or double (ie, if it has wrong data type), 
       print, 'Line slope m has incorrect data type. No cuts will be made.'                                 ; tell the user so and make no cuts 
-    ENDIF ELSE IF ( (size(parameters[1], /type) NE 4) OR (size(parameters[1], /type) NE 5) ) THEN BEGIN  ; if the user's b isn't a float or double (ie, if it has wrong data type), 
+    ENDIF ELSE IF ( (size(parameters[1], /type) NE 4) AND (size(parameters[1], /type) NE 5) ) THEN BEGIN ; if the user's b isn't a float or double (ie, if it has wrong data type), 
       print, 'Line y-intercept b has incorrect data type. No cuts will be made.'                           ; tell the user so and make no cuts 
-    ENDIF ELSE IF ( (size(parameters[2], /type) NE 4) OR (size(parameters[2], /type) NE 5) ) THEN BEGIN  ; if the user's c isn't a float or double (ie, if it has wrong data type), 
+    ENDIF ELSE IF ( (size(parameters[2], /type) NE 4) AND (size(parameters[2], /type) NE 5) ) THEN BEGIN ; if the user's c isn't a float or double (ie, if it has wrong data type), 
       print, 'Line cap c has incorrect data type. No cuts will be made.'                                   ; tell the user so and make no cuts 
     ENDIF ELSE IF (size(parameters[3], /type) NE 7) THEN BEGIN                                           ; if useblue isn't a string (ie, if it has wrong data type), 
       print, 'Parameter "useblue" has incorrect data type. No cuts will be made.'                          ; tell the user so and make no cuts 
@@ -377,7 +375,7 @@ END       ; of makeacut procedure
 
 
 
-  PRO zfilter, filename, z, zerr, zstring, skip 
+  PRO zfilter, filename, z, zerr, skip 
   ;---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------;
   ; zfilter procedure
   ;  Reads in a FITS file created by the blobsampling or fieldsampling procedures and filters that file to contain only galaxies within a specified redshift range. 
@@ -385,7 +383,6 @@ END       ; of makeacut procedure
   ; INPUT: filename - a string giving the name of a FITS file containing galaxy IDs within multiple apertures 
   ;        z - the target redshift at which we want to keep galaxies 
   ;        zerr - the maximum difference between a galaxy's redshift and the target redshift for that galaxy to be kept 
-  ;        zstring - the target redshift written as a string in the following format: for z = 2.3, zstring = '2p3'
   ;        skip - an integer or array of integers giving the index/indices of a catalog to be skipped when applying cuts; to skip no indices, set skip to -1 
   ;
   ; OUTPUT: Filters galaxies with z not within z +- zerr out of the structure from the original FITS file and writes the filtered structure into a new FITS file.  
@@ -398,40 +395,34 @@ END       ; of makeacut procedure
     FORWARD_FUNCTION remover                                                                                 ; notify IDL that this function will be used 
     apstruct = mrdfits('/boomerang-data/alhall/GalaxiesInBlobs/LIONScatalogs/apertures/'+filename+'.fits',1) ; read the apertures file into a structure
     naps = n_elements(apstruct)                                                                              ; count the number of apertures in the structure
-    nskip = n_elements(skip)                                                                                 ; count number of apertures to skip 
     skiporder = sort(skip)                                                                                   ; get indices of skip such that elements are in ascending order
-    skip = skip[skiporder]                                                                                   ; rewrite skip so elements increase to avoid later loop issues
+    skip = skip[skiporder]                                                                                   ; rewrite skip so elements increase to make checks easier 
 
-    ; do cuts on whole structure if we don't have to skip any apertures 
-    IF (skip EQ -1) THEN BEGIN                                                                               ; if no apertures should be skipped over when making the cut, 
+    ; if we don't have to skip any apertures, do cuts on whole structure  
+    IF (skip[0] EQ -1) THEN BEGIN                                                                            ; if no apertures should be skipped over when making the cut, 
       FOR ap=0, naps-1 DO BEGIN                                                                                ; for each aperture in the structure: 
         badz = WHERE( (apstruct(ap).galz GT (z+zerr)) OR (apstruct(ap).galz LT (z-zerr)) )                       ; find where galaxy redshifts don't fall near target redshift
         apstruct = remover(apstruct, ap, badz)                                                                   ; remove those galaxies from the structure 
       ENDFOR                                                                                                   ; all the apertures in the structure have been filtered by z 
 
-    ; if we do have to skip any apertures, break up the structure array into pieces
-    ; first piece of structure array: 
-    ENDIF ELSE IF (skip NE -1) THEN BEGIN                                                                    ; if at least one aperture should be skipped when making the cut, 
-      FOR ap=0, skip[0]-1 DO BEGIN                                                                             ; for each aperture in the structure from start to first skip: 
-        badz = WHERE( (apstruct(ap).galz GT (z+zerr)) OR (apstruct(ap).galz LT (z-zerr)) )                       ; find where galaxy redshifts don't fall near target redshift
-        apstruct = remover(apstruct, ap, badz)                                                                   ; remove those galaxies from the structure 
-      ENDFOR                                                                                                   ; apertures from 0 to first skip have been filtered by z 
-      ; middle piece(s) of structure array:
-      IF (nskip GT 1) THEN BEGIN                                                                               ; if there's more than one aperture to be skipped, 
-        FOR skipap=1, nskip-2 DO BEGIN                                                                           ; loop over all the skips between the first and last ones 
-          FOR ap=skip[skipap-1]+1, skip[skipap]-1 DO BEGIN                                                         ; for each aperture in the structure between two skips: 
-            badz = WHERE( (apstruct(ap).galz GT (z+zerr)) OR (apstruct(ap).galz LT (z-zerr)) )                       ; find where galaxy redshifts don't fall near target redshift
-            apstruct = remover(apstruct, ap, badz)                                                                   ; remove those galaxies from the structure 
-          ENDFOR                                                                                                   ; apertures between skips have been filtered by z 
-        ENDFOR                                                                                                   ; all apertures from start to the last skip have been updated 
-      ENDIF                                                                                                    ; if more that one aperture had to be skipped   
-      ; last piece of structure array: 
-      FOR ap=skip[-1]+1, naps-1 DO BEGIN                                                                       ; for each aperture in the structure from last skip to end: 
-        badz = WHERE( (apstruct(ap).galz GT (z+zerr)) OR (apstruct(ap).galz LT (z-zerr)) )                       ; find where galaxy redshifts don't fall near target redshift
-        apstruct = remover(apstruct, ap, badz)                                                                   ; remove those galaxies from the structure 
-      ENDFOR                                                                                                   ; apertures from last skip to end have been filtered by z 
-    ENDIF                                                                                                    ; if at least one aperture had to be skipped over 
+    ; if we do have to skip any apertures, check each aperture to see whether or not we're skipping it
+    ENDIF ELSE IF (skip[0] GE 0) THEN BEGIN                                                                  ; if at least one aperture should be skipped when making the cut, 
+      FOR ap=0, naps-1 DO BEGIN                                                                                ; for each aperture in the structure:   
+        skipcheck = WHERE(skip EQ ap, skipthis)                                                                  ; see if this aperture is supposed to be skipped 
+        IF (skipthis EQ 0) THEN BEGIN                                                                            ; if this aperture is NOT supposed to be skipped, 
+          badz = WHERE( (apstruct(ap).galz GT (z+zerr)) OR (apstruct(ap).galz LT (z-zerr)) )                       ; find where galaxy redshifts don't fall near target redshift
+          apstruct = remover(apstruct, ap, badz)                                                                   ; remove those galaxies from the structure 
+        ENDIF                                                                                                    ; skipthis = 0 (ie, this aperture wasn't in the skip array)
+      ENDFOR                                                                                                   ; all desired apertures have been filtered by z, skips were unaltered
 
+    ; last, make sure that skip wasn't entered wrong and if it was, make note of it 
+    ENDIF ELSE BEGIN                                                                                         ; if the first element of skip is less than -1, 
+      print, 'Error: Invalid aperture index in "skip" array. Cuts will not be made.'                           ; print an error message and don't alter the input structure
+    ENDELSE                                                                                                  ; all possible values of first entry in "skip" have been accounted for 
+
+    ; write the resulting structure to a FITS file 
+    inputzstring = strcompress(string(z, format='(D0.3)'), /remove_all)                                                          ; convert input z into a string 
+    zstring = strjoin(strsplit(inputzstring, '.', /extract), 'p')                                                                ; replace dot in z with "p" for use in filename
     newfile = '/boomerang-data/alhall/GalaxiesInBlobs/LIONScatalogs/apertures/z/'+zstring+'/'+filename+'_z' + zstring + '.fits'  ; make a new filename for the filtered structure
     mwrfits, apstruct, newfile, /create                                                                                          ; write the filtered structure to a fits file 
   END       ; of zfilter procedure
@@ -469,79 +460,51 @@ END       ; of makeacut procedure
     FORWARD_FUNCTION remover                                                                                 ; notify IDL that this function will be used 
     apstruct = mrdfits('/boomerang-data/alhall/GalaxiesInBlobs/LIONScatalogs/apertures/'+filename+'.fits',1) ; read the apertures file into a structure
     naps = n_elements(apstruct)                                                                              ; count the number of apertures in the structure
-    nskip = n_elements(skip)                                                                                 ; count number of apertures to skip 
     skiporder = sort(skip)                                                                                   ; get indices of skip such that elements are in ascending order
-    skip = skip[skiporder]                                                                                   ; rewrite skip so elements increase to avoid later loop issues
+    skip = skip[skiporder]                                                                                   ; rewrite skip so elements increase to make checks easier 
 
-    IF ( (useblue NE 'blue') AND (useblue NE 'altblue') ) THEN BEGIN              ; make sure user correctly specified which blue filter to use 
-      print, 'Specified blue filter does not exist. No cuts will be made.'          ; if not, tell user so and make no cuts 
-    ENDIF ELSE BEGIN                                                              ; if blue filter was specified correctly, proceed with cuts 
+    IF ( (useblue NE 'blue') AND (useblue NE 'altblue') ) THEN BEGIN                    ; make sure user correctly specified which blue filter to use 
+      print, 'Specified blue filter does not exist. No cuts will be made.'                ; if not, tell user so and make no cuts 
+    ENDIF ELSE BEGIN                                                                    ; if blue filter was specified correctly, proceed with cuts 
 
       ; do cuts on whole structure if we don't have to skip any apertures 
-      IF (skip EQ -1) THEN BEGIN                                                    ; if no apertures should be skipped over when making the cut, 
-        FOR ap=0, naps-1 DO BEGIN                                                     ; for each aperture in the structure: 
-          IF (useblue EQ 'blue') THEN blue = apstruct(ap).blue                          ; use the "blue" tag if user specified "blue"
-          IF (useblue EQ 'altblue') THEN blue = apstruct(ap).altblue                    ; use the "altblue" tag if user specified "altblue"
-          xcolor = blue - apstruct(ap).mid                                              ; define the x axis of a color diagram (blue - middle filter)
-          ycolor = apstruct(ap).mid - apstruct(ap).galmags                              ; define the y axis of a color diagram (middle - red filter)      
-          bad = WHERE ( (ycolor LT (xcolor*m + b)) AND (ycolor GE c), ngals )           ; get indices of galaxies that fall below the straight-line cut 
-          IF (ngals EQ 0) THEN BEGIN                                                    ; if every galaxy in this aperture has a good color, 
-            print, 'All galaxies in this aperture have colors above the cut.'             ; tell the user so and don't remove any galaxies 
-          ENDIF ELSE BEGIN                                                              ; if there are any galaxies that don't make the cut, 
-            apstruct = remover(apstruct, ap, bad)                                         ; remove them from the structure 
-          ENDELSE                                                                       ; this aperture has now been filtered 
-        ENDFOR                                                                        ; all apertures have now been filtered 
+      IF (skip[0] EQ -1) THEN BEGIN                                                       ; if no apertures should be skipped over when making the cut, 
+        FOR ap=0, naps-1 DO BEGIN                                                           ; for each aperture in the structure: 
+          IF (useblue EQ 'blue') THEN blue = apstruct(ap).blue                                ; use the "blue" tag if user specified "blue"
+          IF (useblue EQ 'altblue') THEN blue = apstruct(ap).altblue                          ; use the "altblue" tag if user specified "altblue"
+          xcolor = blue - apstruct(ap).mid                                                    ; define the x axis of a color diagram (blue - middle filter)
+          ycolor = apstruct(ap).mid - apstruct(ap).galmags                                    ; define the y axis of a color diagram (middle - red filter)      
+          bad = WHERE ( (ycolor LT (xcolor*m + b)) AND (ycolor GE c), ngals )                 ; get indices of galaxies that fall below the straight-line cut 
+          IF (ngals NE 0) THEN BEGIN                                                          ; if there are any galaxies that don't make the cut,
+            apstruct = remover(apstruct, ap, bad)                                               ; remove them from the structure 
+          ENDIF                                                                               ; this aperture has now been filtered 
+        ENDFOR                                                                              ; all apertures have now been filtered 
 
-      ; if we do have to skip any apertures, break up the structure array into pieces
-      ; first piece of structure array: 
-      ENDIF ELSE IF (skip NE -1) THEN BEGIN                                         ; if at least one aperture should be skipped when making the cut, 
-        FOR ap=0, skip[0]-1 DO BEGIN                                                  ; for each aperture in the structure from start to first skip: 
-          IF (useblue EQ 'blue') THEN blue = apstruct(ap).blue                          ; use the "blue" tag if user specified "blue"
-          IF (useblue EQ 'altblue') THEN blue = apstruct(ap).altblue                    ; use the "altblue" tag if user specified "altblue"
-          xcolor = blue - apstruct(ap).mid                                              ; define the x axis of a color diagram (blue - middle filter)
-          ycolor = apstruct(ap).mid - apstruct(ap).galmags                              ; define the y axis of a color diagram (middle - red filter)      
-          bad = WHERE ( (ycolor LT (xcolor*m + b)) AND (ycolor GE c), ngals )           ; get indices of galaxies that fall below the straight-line cut 
-          IF (ngals EQ 0) THEN BEGIN                                                    ; if every galaxy in this aperture has a good color, 
-            print, 'All galaxies in this aperture have colors above the cut.'             ; tell the user so and don't remove any galaxies 
-          ENDIF ELSE BEGIN                                                              ; if there are any galaxies that don't make the cut, 
-            apstruct = remover(apstruct, ap, bad)                                         ; remove them from the structure 
-          ENDELSE                                                                       ; this aperture has now been filtered 
-        ENDFOR                                                                        ; apertures from 0 to first skip have been filtered 
-        ; middle piece(s) of structure array:
-        IF (nskip GT 1) THEN BEGIN                                                    ; if there's more than one aperture to be skipped, 
-          FOR skipap=1, nskip-2 DO BEGIN                                                ; loop over all the skips between the first and last ones 
-            FOR ap=skip[skipap-1]+1, skip[skipap]-1 DO BEGIN                              ; for each aperture in the structure between two skips: 
-              IF (useblue EQ 'blue') THEN blue = apstruct(ap).blue                          ; use the "blue" tag if user specified "blue"
-              IF (useblue EQ 'altblue') THEN blue = apstruct(ap).altblue                    ; use the "altblue" tag if user specified "altblue"
-              xcolor = blue - apstruct(ap).mid                                              ; define the x axis of a color diagram (blue - middle filter)
-              ycolor = apstruct(ap).mid - apstruct(ap).galmags                              ; define the y axis of a color diagram (middle - red filter)      
-              bad = WHERE ( (ycolor LT (xcolor*m + b)) AND (ycolor GE c), ngals )           ; get indices of galaxies that fall below the straight-line cut 
-              IF (ngals EQ 0) THEN BEGIN                                                    ; if every galaxy in this aperture has a good color, 
-                print, 'All galaxies in this aperture have colors above the cut.'             ; tell the user so and don't remove any galaxies 
-              ENDIF ELSE BEGIN                                                              ; if there are any galaxies that don't make the cut, 
-                apstruct = remover(apstruct, ap, bad)                                         ; remove them from the structure 
-              ENDELSE                                                                       ; this aperture has now been filtered 
-            ENDFOR                                                                        ; apertures between skips have been filtered
-          ENDFOR                                                                        ; all apertures from start to the last skip have been filtered 
-        ENDIF                                                                         ; if more that one aperture had to be skipped   
-        ; last piece of structure array: 
-        FOR ap=skip[-1]+1, naps-1 DO BEGIN                                            ; for each aperture in the structure from last skip to end: 
-          IF (useblue EQ 'blue') THEN blue = apstruct(ap).blue                          ; use the "blue" tag if user specified "blue"
-          IF (useblue EQ 'altblue') THEN blue = apstruct(ap).altblue                    ; use the "altblue" tag if user specified "altblue"
-          xcolor = blue - apstruct(ap).mid                                              ; define the x axis of a color diagram (blue - middle filter)
-          ycolor = apstruct(ap).mid - apstruct(ap).galmags                              ; define the y axis of a color diagram (middle - red filter)      
-          bad = WHERE ( (ycolor LT (xcolor*m + b)) AND (ycolor GE c), ngals )           ; get indices of galaxies that fall below the straight-line cut 
-          IF (ngals EQ 0) THEN BEGIN                                                    ; if every galaxy in this aperture has a good color, 
-            print, 'All galaxies in this aperture have colors above the cut.'             ; tell the user so and don't remove any galaxies 
-          ENDIF ELSE BEGIN                                                              ; if there are any galaxies that don't make the cut, 
-            apstruct = remover(apstruct, ap, bad)                                         ; remove them from the structure 
-          ENDELSE                                                                       ; this aperture has now been filtered 
-        ENDFOR                                                                        ; apertures from last skip to end have been filtered
-      ENDIF                                                                         ; if at least one aperture had to be skipped over 
-    ENDELSE                                                                     ; the "useblue" parameter was input correctly 
+      ; if we do have to skip any apertures, check each aperture to see whether or not we're skipping it
+      ENDIF ELSE IF (skip[0] GE 0) THEN BEGIN                                             ; if at least one aperture should be skipped when making the cut, 
+        FOR ap=0, naps-1 DO BEGIN                                                           ; for each aperture in the structure: 
+          skipcheck = WHERE(skip EQ ap, skipthis)                                             ; see if this aperture is supposed to be skipped 
+          IF (skipthis EQ 0) THEN BEGIN                                                       ; if this aperture is NOT supposed to be skipped, 
+            IF (useblue EQ 'blue') THEN blue = apstruct(ap).blue                                ; use the "blue" tag if user specified "blue"
+            IF (useblue EQ 'altblue') THEN blue = apstruct(ap).altblue                          ; use the "altblue" tag if user specified "altblue"
+            xcolor = blue - apstruct(ap).mid                                                    ; define the x axis of a color diagram (blue - middle filter)
+            ycolor = apstruct(ap).mid - apstruct(ap).galmags                                    ; define the y axis of a color diagram (middle - red filter)      
+            bad = WHERE ( (ycolor LT (xcolor*m + b)) AND (ycolor GE c), ngals )                 ; get indices of galaxies that fall below the straight-line cut 
+            IF (ngals NE 0) THEN BEGIN                                                          ; if there are any galaxies that don't make the cut,
+              apstruct = remover(apstruct, ap, bad)                                               ; remove them from the structure 
+            ENDIF                                                                               ; this aperture has now been filtered 
+          ENDIF                                                                               ; skipthis = 0 (ie, this aperture wasn't in the skip array)
+        ENDFOR                                                                              ; all desired apertures have been filtered, skips were unaltered
+  
+      ; last, make sure that skip wasn't entered wrong and if it was, make note of it 
+      ENDIF ELSE BEGIN                                                                    ; if the first element of skip is less than -1, 
+        print, 'Error: Invalid aperture index in "skip" array. Cuts will not be made.'      ; print an error message and don't alter the input structure
+      ENDELSE                                                                             ; all possible values of first entry in "skip" have been accounted for 
 
-    newfile = '/boomerang-data/alhall/GalaxiesInBlobs/LIONScatalogs/apertures/colorline/'+nameadd+'/'+filename+'_'+nameadd+'.fits'  ; make a new filename for the filtered structure
-    mwrfits, apstruct, newfile, /create                                                                                   ; write the filtered structure to a fits file 
+    ; write the resulting structure to a FITS file 
+    ENDELSE                                                                             ; the "useblue" parameter was input correctly 
+    newfile = '/boomerang-data/alhall/GalaxiesInBlobs/LIONScatalogs/apertures/colorline/'+nameadd+'/'+filename+'_'+nameadd+'.fits' ; make a new filename for the filtered structure
+    mwrfits, apstruct, newfile, /create                                                                                            ; write the filtered structure to a fits file 
   END        ; of colorline procedure 
 
 
